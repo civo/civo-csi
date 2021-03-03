@@ -78,6 +78,11 @@ spec:
                 secretKeyRef:
                   name: api-access
                   key: api-key
+            - name: CIVO_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: api-access
+                  key: region
             - name: CIVO_API_URL
               valueFrom:
                 secretKeyRef:

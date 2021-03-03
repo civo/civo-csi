@@ -1,1 +1,3 @@
 deploy/kubernetes-dev/
+csi
+civo-csi

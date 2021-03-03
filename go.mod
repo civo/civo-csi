@@ -1,14 +1,17 @@
-module civo.com/csi
-
-go 1.15
+module github.com/civo/civo-csi
 
 require (
-	github.com/container-storage-interface/spec v1.3.0 // indirect
+	github.com/civo/civogo v0.2.29
+	github.com/container-storage-interface/spec v1.3.0
 	github.com/google/uuid v1.2.0 // indirect
 	github.com/kubernetes-csi/csi-test v2.2.0+incompatible
 	github.com/kubernetes-csi/csi-test/v4 v4.0.2
 	github.com/onsi/ginkgo v1.15.0 // indirect
 	github.com/onsi/gomega v1.10.5 // indirect
-	google.golang.org/grpc v1.35.0 // indirect
+	github.com/sirupsen/logrus v1.4.2
+	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
+	google.golang.org/grpc v1.35.0
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
+
+go 1.15

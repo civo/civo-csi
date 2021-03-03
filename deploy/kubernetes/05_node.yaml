@@ -46,6 +46,12 @@ spec:
           env:
             - name: CSI_ENDPOINT
               value: unix:///csi/csi.sock
+            # TODO: I don't think the node actually needs these?
+            - name: REGION
+              valueFrom:
+                secretKeyRef:
+                  name: api-access
+                  key: region
             - name: CIVO_API_KEY
               valueFrom:
                 secretKeyRef:

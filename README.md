@@ -45,5 +45,5 @@ The steps are:
 2. Build the Docker image with `docker build -t ttl.sh/${IMAGE_NAME}:2h .`
 3. Push the Docker image to ttl.sh (a short lived Docker image repository, useful for dev): `docker push ttl.sh/${IMAGE_NAME}:2h`
 4. Copy recursively the `deploy/kubernetes` folder to `deploy/kubernetes-dev` and replace all occurences of `civo-csi:latest` in there with `YOUR_IMAGE_NAME:2h` (ENV variable interpolation won't work here), this folder is automatically in `.gitignore`
-5. In a test cluster (a Civo K3s 1 node cluster will work) you'll need to create a `Secret` within the `civo-system` called `api-access` containing the keys `api-key` and `api-url` set to your Civo API key and either `https://api.civo.com` or a xip.io/ngrok pointing to your local development environment (depending on where your cluster is running)
+5. In a test cluster (a Civo K3s 1 node cluster will work) you'll need to create a `Secret` within the `civo-system` called `api-access` containing the keys `api-key` set to your Civo API key, `api-url` pointing to either `https://api.civo.com` or a xip.io/ngrok pointing to your local development environment (depending on where your cluster is running) and `region` set to the region the current cluster is running in
 6. Deploy the Kubernetes resources required to the cluster with `kubectl apply -f deploy/kubernetes-dev`
