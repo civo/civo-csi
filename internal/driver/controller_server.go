@@ -2,7 +2,6 @@ package driver
 
 import (
 	"context"
-	"errors"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"google.golang.org/grpc/codes"
@@ -39,7 +38,7 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 // DeleteVolume is used once a volume is unused and therefore unmounted, to stop the resources being used and subsequent billing
 func (d *Driver) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest) (*csi.DeleteVolumeResponse, error) {
 	if req.VolumeId == "" {
-		return nil, errors.New("must provide a VolumeId to DeleteVolume")
+		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to DeleteVolume")
 	}
 
 	// Delete volume in Civo API
@@ -49,11 +48,11 @@ func (d *Driver) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest)
 // ControllerPublishVolume is used to mount an underlying volume to required k3s node
 func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.ControllerPublishVolumeRequest) (*csi.ControllerPublishVolumeResponse, error) {
 	if req.VolumeId == "" {
-		return nil, errors.New("must provide a VolumeId to ControllerPublishVolume")
+		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to ControllerPublishVolume")
 	}
 
 	if req.NodeId == "" {
-		return nil, errors.New("must provide a NodeId to ControllerPublishVolume")
+		return nil, status.Error(codes.InvalidArgument, "must provide a NodeId to ControllerPublishVolume")
 	}
 
 	// Find the volume
@@ -69,11 +68,11 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 // ControllerUnpublishVolume detaches the volume from the k3s node it was connected
 func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.ControllerUnpublishVolumeRequest) (*csi.ControllerUnpublishVolumeResponse, error) {
 	if req.VolumeId == "" {
-		return nil, errors.New("must provide a VolumeId to ControllerUnpublishVolume")
+		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to ControllerUnpublishVolume")
 	}
 
 	if req.NodeId == "" {
-		return nil, errors.New("must provide a NodeId to ControllerUnpublishVolume")
+		return nil, status.Error(codes.InvalidArgument, "must provide a NodeId to ControllerUnpublishVolume")
 	}
 
 	// Find the volume
@@ -84,22 +83,22 @@ func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.Control
 
 // ControllerExpandVolume is unsupported at the moment in Civo
 func (d *Driver) ControllerExpandVolume(context.Context, *csi.ControllerExpandVolumeRequest) (*csi.ControllerExpandVolumeResponse, error) {
-	return nil, errors.New("unable to expand Civo volumes currently")
+	return nil, status.Error(codes.Unimplemented, "")
 }
 
 // ControllerGetVolume is for optional Kubernetes health checking of volumes and we don't support it yet
 func (d *Driver) ControllerGetVolume(context.Context, *csi.ControllerGetVolumeRequest) (*csi.ControllerGetVolumeResponse, error) {
-	return nil, errors.New("getting of volumes is currently not implemented")
+	return nil, status.Error(codes.Unimplemented, "")
 }
 
 // ValidateVolumeCapabilities returns the features of the volume, e.g. RW, RO, RWX
 func (d *Driver) ValidateVolumeCapabilities(ctx context.Context, req *csi.ValidateVolumeCapabilitiesRequest) (*csi.ValidateVolumeCapabilitiesResponse, error) {
 	if req.VolumeId == "" {
-		return nil, errors.New("must provide a VolumeId to ValidateVolumeCapabilities")
+		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to ValidateVolumeCapabilities")
 	}
 
 	if req.VolumeCapabilities == nil {
-		return nil, errors.New("must provide VolumeCapabilities to ValidateVolumeCapabilities")
+		return nil, status.Error(codes.InvalidArgument, "must provide VolumeCapabilities to ValidateVolumeCapabilities")
 	}
 
 	supportedAccessModes := []csi.VolumeCapability_AccessMode_Mode{
@@ -180,15 +179,15 @@ func (d *Driver) ControllerGetCapabilities(context.Context, *csi.ControllerGetCa
 
 // CreateSnapshot is part of implementing Snapshot & Restore functionality, but we don't support that
 func (d *Driver) CreateSnapshot(context.Context, *csi.CreateSnapshotRequest) (*csi.CreateSnapshotResponse, error) {
-	return nil, errors.New("creating snapshots is currently not implemented")
+	return nil, status.Error(codes.Unimplemented, "")
 }
 
 // DeleteSnapshot is part of implementing Snapshot & Restore functionality, but we don't support that
 func (d *Driver) DeleteSnapshot(context.Context, *csi.DeleteSnapshotRequest) (*csi.DeleteSnapshotResponse, error) {
-	return nil, errors.New("delete snapshots is currently not implemented")
+	return nil, status.Error(codes.Unimplemented, "")
 }
 
 // ListSnapshots is part of implementing Snapshot & Restore functionality, but we don't support that
 func (d *Driver) ListSnapshots(context.Context, *csi.ListSnapshotsRequest) (*csi.ListSnapshotsResponse, error) {
-	return nil, errors.New("listing snapshots is currently not implemented")
+	return nil, status.Error(codes.Unimplemented, "")
 }

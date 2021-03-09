@@ -1,6 +1,7 @@
 module github.com/civo/civo-csi
 
 require (
+	github.com/BurntSushi/toml v0.3.1 // indirect
 	github.com/civo/civogo v0.2.29
 	github.com/container-storage-interface/spec v1.3.0
 	github.com/google/uuid v1.2.0 // indirect

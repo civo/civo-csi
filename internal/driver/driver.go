@@ -12,6 +12,7 @@ import (
 	"github.com/civo/civogo"
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
 
@@ -26,8 +27,12 @@ const SocketFilename string = "unix:///var/lib/kubelet/plugins/civo-csi/csi.sock
 
 // Driver implement the CSI endpoints for Identity, Node and Controller
 type Driver struct {
-	civoClient *civogo.Client
-	controller bool
+	civoClient     *civogo.Client
+	controller     bool
+	SocketFilename string
+
+	NodeInstanceID string
+	Region         string
 
 	grpcServer *grpc.Server
 	log        *logrus.Entry
@@ -46,16 +51,17 @@ func NewDriver(apiURL, apiKey, region string) (*Driver, error) {
 	}
 
 	return &Driver{
-		civoClient: client,
-		controller: (apiKey != ""),
-		grpcServer: &grpc.Server{},
-		log:        log,
+		civoClient:     client,
+		controller:     (apiKey != ""),
+		SocketFilename: SocketFilename,
+		grpcServer:     &grpc.Server{},
+		log:            log,
 	}, nil
 }
 
 // Run the driver's gRPC server
 func (d *Driver) Run(ctx context.Context) error {
-	urlParts, _ := url.Parse(SocketFilename)
+	urlParts, _ := url.Parse(d.SocketFilename)
 
 	grpcAddress := path.Join(urlParts.Host, filepath.FromSlash(urlParts.Path))
 	if urlParts.Host == "" {
@@ -90,5 +96,15 @@ func (d *Driver) Run(ctx context.Context) error {
 		"grpc_address": grpcAddress,
 	}).Info("starting server")
 
-	return d.grpcServer.Serve(grpcListener)
+	var eg errgroup.Group
+
+	eg.Go(func() error {
+		go func() {
+			<-ctx.Done()
+			d.grpcServer.GracefulStop()
+		}()
+		return d.grpcServer.Serve(grpcListener)
+	})
+
+	return eg.Wait()
 }
