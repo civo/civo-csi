@@ -6,6 +6,7 @@ import (
 	"github.com/container-storage-interface/spec/lib/go/csi"
 )
 
+// GetPluginInfo returns the name and volume of our driver
 func (d *Driver) GetPluginInfo(context.Context, *csi.GetPluginInfoRequest) (*csi.GetPluginInfoResponse, error) {
 	return &csi.GetPluginInfoResponse{
 		Name:          "com.civo.csi",
@@ -13,6 +14,7 @@ func (d *Driver) GetPluginInfo(context.Context, *csi.GetPluginInfoRequest) (*csi
 	}, nil
 }
 
+// GetPluginCapabilities returns a list of the capabilities of this controller plugin
 func (d *Driver) GetPluginCapabilities(context.Context, *csi.GetPluginCapabilitiesRequest) (*csi.GetPluginCapabilitiesResponse, error) {
 	return &csi.GetPluginCapabilitiesResponse{
 		Capabilities: []*csi.PluginCapability{
@@ -27,7 +29,8 @@ func (d *Driver) GetPluginCapabilities(context.Context, *csi.GetPluginCapabiliti
 	}, nil
 }
 
+// Probe is a health check for the driver
 func (d *Driver) Probe(context.Context, *csi.ProbeRequest) (*csi.ProbeResponse, error) {
-	// TODO: Implement this probe health check the right way
+	// Not sure how to implement this probe health check the right way - check the Civo API is responsive?
 	return &csi.ProbeResponse{}, nil
 }
