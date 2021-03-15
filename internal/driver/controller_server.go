@@ -3,10 +3,19 @@ package driver
 import (
 	"context"
 
+	"github.com/civo/civogo"
 	"github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+const bytesInGigabyte int64 = 1024 * 1024 * 1024
+
+var supportedAccessModes = []csi.VolumeCapability_AccessMode_Mode{
+	csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
+	csi.VolumeCapability_AccessMode_SINGLE_NODE_READER_ONLY,
+}
 
 // CreateVolume is the first step when a PVC tries to create a dynamic volume
 func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
@@ -17,22 +26,81 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 	if req.VolumeCapabilities == nil || len(req.VolumeCapabilities) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "CreateVolume Volume capabilities must be provided")
 	}
+	log.Info().Str("name", req.Name).Interface("capabilities", req.VolumeCapabilities).Msg("creating volume")
 
 	// Check capabilities
-	// Determine required size
-	// Extract name
-	// Ignore if volume already exists
-	// Check quota
-	// Create volume in Civo API
+	for _, cap := range req.VolumeCapabilities {
+		modeSupported := false
+		for _, mode := range supportedAccessModes {
+			if cap.GetAccessMode().GetMode() == mode {
+				modeSupported = true
+			}
+		}
 
-	resp := &csi.CreateVolumeResponse{
-		Volume: &csi.Volume{
-			VolumeId:      "", // TODO: volume ID
-			CapacityBytes: 0,  // TODO: Actual size
-		},
+		if !modeSupported {
+			return nil, status.Error(codes.InvalidArgument, "CreateVolume access mode isn't supported")
+		}
 	}
 
-	return resp, nil
+	// Determine required size
+	bytes, err := getVolSizeInBytes(req)
+	if err != nil {
+		return nil, err
+	}
+
+	desiredSize := bytes / bytesInGigabyte
+	if (bytes % bytesInGigabyte) != 0 {
+		desiredSize++
+	}
+
+	volumeName := req.GetName()
+	if len(volumeName) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "Volume name not provided")
+	}
+
+	// Ignore if volume already exists
+	volumes, err := d.CivoClient.ListVolumes()
+	if err != nil {
+		return nil, err
+	}
+	for _, v := range volumes {
+		if v.Name == volumeName {
+			return &csi.CreateVolumeResponse{
+				Volume: &csi.Volume{
+					VolumeId:      v.ID,
+					CapacityBytes: int64(v.SizeGigabytes) * bytesInGigabyte,
+				},
+			}, nil
+		}
+	}
+
+	// Check quota
+	quota, err := d.CivoClient.GetQuota()
+	if err != nil {
+		return nil, err
+	}
+	availableSize := int64(quota.DiskGigabytesLimit - quota.DiskGigabytesUsage)
+	if (availableSize < desiredSize) || (quota.DiskVolumeCountUsage >= quota.DiskVolumeCountLimit) {
+		return nil, status.Error(codes.OutOfRange, "Volume would exceed quota")
+	}
+
+	// Create volume in Civo API
+	v := &civogo.VolumeConfig{
+		Name:          volumeName,
+		Region:        d.Region,
+		SizeGigabytes: int(desiredSize),
+	}
+	volume, err := d.CivoClient.NewVolume(v)
+	if err != nil {
+		return nil, err
+	}
+
+	return &csi.CreateVolumeResponse{
+		Volume: &csi.Volume{
+			VolumeId:      volume.ID,
+			CapacityBytes: int64(v.SizeGigabytes) * bytesInGigabyte,
+		},
+	}, nil
 }
 
 // DeleteVolume is used once a volume is unused and therefore unmounted, to stop the resources being used and subsequent billing
@@ -101,11 +169,6 @@ func (d *Driver) ValidateVolumeCapabilities(ctx context.Context, req *csi.Valida
 		return nil, status.Error(codes.InvalidArgument, "must provide VolumeCapabilities to ValidateVolumeCapabilities")
 	}
 
-	supportedAccessModes := []csi.VolumeCapability_AccessMode_Mode{
-		csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
-		csi.VolumeCapability_AccessMode_SINGLE_NODE_READER_ONLY,
-	}
-
 	accessModeSupported := false
 	for _, cap := range req.VolumeCapabilities {
 		for _, m := range supportedAccessModes {
@@ -135,7 +198,7 @@ func (d *Driver) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (
 	// create a ListVolumesResponse_Entry array
 	// set NextToken in the response if there are more pages than the current page
 
-	return nil, nil
+	return nil, status.Error(codes.Unimplemented, "")
 }
 
 // GetCapacity calls the Civo API to determine the user's available quota
@@ -190,4 +253,21 @@ func (d *Driver) DeleteSnapshot(context.Context, *csi.DeleteSnapshotRequest) (*c
 // ListSnapshots is part of implementing Snapshot & Restore functionality, but we don't support that
 func (d *Driver) ListSnapshots(context.Context, *csi.ListSnapshotsRequest) (*csi.ListSnapshotsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "")
+}
+
+func getVolSizeInBytes(req *csi.CreateVolumeRequest) (int64, error) {
+	var bytes int64
+
+	capRange := req.GetCapacityRange()
+	if capRange == nil {
+		return int64(DefaultVolumeSizeGB) * bytesInGigabyte, nil
+	}
+
+	// Volumes can be of a flexible size, but they must specify one of the fields, so we'll use that
+	bytes = capRange.GetRequiredBytes()
+	if bytes == 0 {
+		bytes = capRange.GetLimitBytes()
+	}
+
+	return bytes, nil
 }

@@ -8,13 +8,19 @@ import (
 
 	"github.com/civo/civo-csi/internal/driver"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 func main() {
+	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+
+	log.Debug().Msg("Hello world AJ")
+
 	d, err := driver.NewDriver(os.Getenv("CIVO_API_URL"), os.Getenv("CIVO_API_KEY"), os.Getenv("CIVO_REGION"))
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatal().Err(err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -28,6 +34,6 @@ func main() {
 	}()
 
 	if err := d.Run(ctx); err != nil {
-		log.Fatalln(err)
+		log.Fatal().Err(err)
 	}
 }

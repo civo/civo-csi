@@ -6,14 +6,22 @@ import (
 	"testing"
 
 	"github.com/civo/civo-csi/internal/driver"
+	"github.com/civo/civogo"
 	"github.com/kubernetes-csi/csi-test/v4/pkg/sanity"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"golang.org/x/sync/errgroup"
 )
 
 // TestCivoCSI runs the Sanity test suite
 func TestCivoCSI(t *testing.T) {
+	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+
 	drv, _ := driver.NewDriver("https://civo-api.example.com", "NO_API_KEY_NEEDED", "TEST1")
+	drv.CivoClient, _ = civogo.NewFakeClient()
 	drv.SocketFilename = "unix:///tmp/civo-csi.sock"
+	drv.TestMode = true // Just stops so much logging out of failures, as they are often expected during the tests
 	if err := os.Remove(drv.SocketFilename); err != nil && !os.IsNotExist(err) {
 		t.Fatalf("failed to remove unix domain socket file %s, error: %s", drv.SocketFilename, err)
 	}

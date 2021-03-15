@@ -11,7 +11,7 @@ import (
 
 	"github.com/civo/civogo"
 	"github.com/container-storage-interface/spec/lib/go/csi"
-	"github.com/sirupsen/logrus"
+	"github.com/rs/zerolog/log"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
@@ -22,40 +22,36 @@ const Name string = "Civo CSI Driver"
 // Version is the current release of the driver
 const Version string = "0.0.1"
 
+// DefaultVolumeSizeGB is the default size in Gigabytes of an unspecified volume
+const DefaultVolumeSizeGB int = 10
+
 // SocketFilename is the location of the Unix domain socket for this driver
 const SocketFilename string = "unix:///var/lib/kubelet/plugins/civo-csi/csi.sock"
 
 // Driver implement the CSI endpoints for Identity, Node and Controller
 type Driver struct {
-	civoClient     *civogo.Client
+	CivoClient     civogo.Clienter
 	controller     bool
 	SocketFilename string
-
 	NodeInstanceID string
 	Region         string
-
-	grpcServer *grpc.Server
-	log        *logrus.Entry
+	TestMode       bool
+	grpcServer     *grpc.Server
 }
 
 // NewDriver returns a CSI driver that implements gRPC endpoints for CSI
 func NewDriver(apiURL, apiKey, region string) (*Driver, error) {
-	log := logrus.New().WithFields(logrus.Fields{
-		"region":  region,
-		"version": Version,
-	})
-
 	client, err := civogo.NewClientWithURL(apiKey, apiURL, region)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Driver{
-		civoClient:     client,
+		CivoClient:     client,
+		Region:         region,
 		controller:     (apiKey != ""),
 		SocketFilename: SocketFilename,
 		grpcServer:     &grpc.Server{},
-		log:            log,
 	}, nil
 }
 
@@ -82,19 +78,22 @@ func (d *Driver) Run(ctx context.Context) error {
 	errHandler := func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		resp, err := handler(ctx, req)
 		if err != nil {
-			d.log.WithError(err).WithField("method", info.FullMethod).Error("method failed")
+			log.Err(err).Str("method", info.FullMethod).Msg("method failed")
 		}
 		return resp, err
 	}
 
-	d.grpcServer = grpc.NewServer(grpc.UnaryInterceptor(errHandler))
+	if d.TestMode {
+		d.grpcServer = grpc.NewServer()
+	} else {
+		d.grpcServer = grpc.NewServer(grpc.UnaryInterceptor(errHandler))
+	}
+
 	csi.RegisterIdentityServer(d.grpcServer, d)
 	csi.RegisterControllerServer(d.grpcServer, d)
 	csi.RegisterNodeServer(d.grpcServer, d)
 
-	d.log.WithFields(logrus.Fields{
-		"grpc_address": grpcAddress,
-	}).Info("starting server")
+	log.Info().Str("grpc_address", grpcAddress).Msg("starting server")
 
 	var eg errgroup.Group
 

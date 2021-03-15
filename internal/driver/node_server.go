@@ -15,8 +15,18 @@ func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRe
 	if req.VolumeId == "" {
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to NodeStageVolume")
 	}
+	if req.StagingTargetPath == "" {
+		return nil, status.Error(codes.InvalidArgument, "must provide a StagingTargetPath to NodeStageVolume")
+	}
+	if req.VolumeCapability == nil {
+		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeCapability to NodeStageVolume")
+	}
 
-	return nil, nil
+	// Get the volume from the API using req.VolumeId
+	// Format the volume if not already formatted
+	// Mount the volume if not already mounted
+
+	return &csi.NodeStageVolumeResponse{}, nil
 }
 
 // NodeUnstageVolume unmounts the volume when it's finished with, ready for deletion
@@ -24,8 +34,11 @@ func (d *Driver) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolu
 	if req.VolumeId == "" {
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to NodeUnstageVolume")
 	}
+	if req.StagingTargetPath == "" {
+		return nil, status.Error(codes.InvalidArgument, "must provide a StagingTargetPath to NodeUnstageVolume")
+	}
 
-	return nil, nil
+	return &csi.NodeUnstageVolumeResponse{}, nil
 }
 
 // NodePublishVolume bind mounts the staging path into the container
@@ -33,8 +46,17 @@ func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolu
 	if req.VolumeId == "" {
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to NodePublishVolume")
 	}
+	if req.StagingTargetPath == "" {
+		return nil, status.Error(codes.InvalidArgument, "must provide a StagingTargetPath to NodePublishVolume")
+	}
+	if req.TargetPath == "" {
+		return nil, status.Error(codes.InvalidArgument, "must provide a TargetPath to NodePublishVolume")
+	}
+	if req.VolumeCapability == nil {
+		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeCapability to NodePublishVolume")
+	}
 
-	return nil, nil
+	return &csi.NodePublishVolumeResponse{}, nil
 }
 
 // NodeUnpublishVolume removes the bind mount
@@ -42,8 +64,11 @@ func (d *Driver) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublish
 	if req.VolumeId == "" {
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to NodeUnpublishVolume")
 	}
+	if req.TargetPath == "" {
+		return nil, status.Error(codes.InvalidArgument, "must provide a TargetPath to NodeUnpublishVolume")
+	}
 
-	return nil, nil
+	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
 
 // NodeGetInfo returns some identifier (ID, name) for the current node
@@ -81,7 +106,7 @@ func (d *Driver) NodeGetCapabilities(ctx context.Context, req *csi.NodeGetCapabi
 	// Intentionally don't return VOLUME_CONDITION and NODE_GET_VOLUME_STATS
 	return &csi.NodeGetCapabilitiesResponse{
 		Capabilities: []*csi.NodeServiceCapability{
-			&csi.NodeServiceCapability{
+			{
 				Type: &csi.NodeServiceCapability_Rpc{
 					Rpc: &csi.NodeServiceCapability_RPC{
 						Type: csi.NodeServiceCapability_RPC_STAGE_UNSTAGE_VOLUME,
