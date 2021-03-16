@@ -11,6 +11,7 @@ import (
 
 	"github.com/civo/civogo"
 	"github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -53,6 +54,18 @@ func NewDriver(apiURL, apiKey, region string) (*Driver, error) {
 		SocketFilename: SocketFilename,
 		grpcServer:     &grpc.Server{},
 	}, nil
+}
+
+// NewTestDriver returns a new Civo CSI driver specifically setup to call a fake Civo API
+func NewTestDriver() (*Driver, error) {
+	d, err := NewDriver("https://civo-api.example.com", "NO_API_KEY_NEEDED", "TEST1")
+	d.CivoClient, _ = civogo.NewFakeClient()
+	d.SocketFilename = "unix:///tmp/civo-csi.sock"
+
+	d.TestMode = true // Just stops so much logging out of failures, as they are often expected during the tests
+	zerolog.SetGlobalLevel(zerolog.PanicLevel)
+
+	return d, err
 }
 
 // Run the driver's gRPC server

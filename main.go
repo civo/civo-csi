@@ -6,7 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/civo/civo-csi/internal/driver"
+	"github.com/civo/civo-csi/pkg/driver"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"

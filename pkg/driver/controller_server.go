@@ -109,7 +109,11 @@ func (d *Driver) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest)
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to DeleteVolume")
 	}
 
-	// Delete volume in Civo API
+	_, err := d.CivoClient.DeleteVolume(req.VolumeId)
+	if err != nil {
+		return nil, err
+	}
+
 	return &csi.DeleteVolumeResponse{}, nil
 }
 
@@ -124,13 +128,20 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 	}
 
 	// Find the volume
-	// Call the CivoAPI to attach it to a node/instance
+	volume, err := d.CivoClient.FindVolume(req.VolumeId)
+	if err != nil {
+		return nil, err
+	}
 
-	return &csi.ControllerPublishVolumeResponse{
-		PublishContext: map[string]string{
-			"csi.civo.com/volume-name": "", // TODO: Should be volume.Name after we find the volume
-		},
-	}, nil
+	// Call the CivoAPI to attach it to a node/instance
+	if volume.InstanceID != req.NodeId {
+		_, err = d.CivoClient.AttachVolume(req.VolumeId, req.NodeId)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return &csi.ControllerPublishVolumeResponse{}, nil
 }
 
 // ControllerUnpublishVolume detaches the volume from the k3s node it was connected
@@ -144,7 +155,18 @@ func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.Control
 	}
 
 	// Find the volume
-	// Call the CivoAPI to attach it to a node/instance
+	volume, err := d.CivoClient.FindVolume(req.VolumeId)
+	if err != nil {
+		return nil, err
+	}
+
+	// Call the CivoAPI to detach it, if it's attached to this node/instance
+	if volume.InstanceID == req.NodeId {
+		_, err = d.CivoClient.DetachVolume(req.VolumeId)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	return &csi.ControllerUnpublishVolumeResponse{}, nil
 }
@@ -193,12 +215,30 @@ func (d *Driver) ValidateVolumeCapabilities(ctx context.Context, req *csi.Valida
 
 // ListVolumes returns the existing Civo volumes for this customer
 func (d *Driver) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (*csi.ListVolumesResponse, error) {
-	// use req.StartingToken, parsed to an int (if not blank) as the page number
 	// call the API to list all the volumes for this customer
-	// create a ListVolumesResponse_Entry array
-	// set NextToken in the response if there are more pages than the current page
+	volumes, err := d.CivoClient.ListVolumes()
+	if err != nil {
+		return nil, err
+	}
 
-	return nil, status.Error(codes.Unimplemented, "")
+	resp := &csi.ListVolumesResponse{
+		Entries: []*csi.ListVolumesResponse_Entry{},
+	}
+
+	for _, v := range volumes {
+		resp.Entries = append(resp.Entries, &csi.ListVolumesResponse_Entry{
+			Volume: &csi.Volume{
+				CapacityBytes: int64(v.SizeGigabytes) * bytesInGigabyte,
+				VolumeId:      v.ID,
+				ContentSource: &csi.VolumeContentSource{
+					Type: &csi.VolumeContentSource_Volume{},
+				},
+			},
+			Status: &csi.ListVolumesResponse_VolumeStatus{},
+		})
+	}
+
+	return resp, nil
 }
 
 // GetCapacity calls the Civo API to determine the user's available quota

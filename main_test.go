@@ -5,8 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/civo/civo-csi/internal/driver"
-	"github.com/civo/civogo"
+	"github.com/civo/civo-csi/pkg/driver"
 	"github.com/kubernetes-csi/csi-test/v4/pkg/sanity"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -18,13 +17,7 @@ func TestCivoCSI(t *testing.T) {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 
-	drv, _ := driver.NewDriver("https://civo-api.example.com", "NO_API_KEY_NEEDED", "TEST1")
-	drv.CivoClient, _ = civogo.NewFakeClient()
-	drv.SocketFilename = "unix:///tmp/civo-csi.sock"
-	drv.TestMode = true // Just stops so much logging out of failures, as they are often expected during the tests
-	if err := os.Remove(drv.SocketFilename); err != nil && !os.IsNotExist(err) {
-		t.Fatalf("failed to remove unix domain socket file %s, error: %s", drv.SocketFilename, err)
-	}
+	d, _ := driver.NewTestDriver()
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -33,7 +26,7 @@ func TestCivoCSI(t *testing.T) {
 
 	var eg errgroup.Group
 	eg.Go(func() error {
-		return drv.Run(ctx)
+		return d.Run(ctx)
 	})
 
 	config := sanity.NewTestConfig()
@@ -44,7 +37,7 @@ func TestCivoCSI(t *testing.T) {
 		t.Fatalf("failed to delete staging path %s: %s", config.StagingPath, err)
 	}
 
-	config.Address = drv.SocketFilename
+	config.Address = d.SocketFilename
 
 	sanity.Test(t, config)
 
