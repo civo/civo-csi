@@ -26,7 +26,12 @@ spec:
           lifecycle:
             preStop:
               exec:
-                command: ["/bin/sh", "-c", "rm -rf /registration/csi.civo.com /registration/csi.civo.com-reg.sock"]
+                command:
+                  [
+                    "/bin/sh",
+                    "-c",
+                    "rm -rf /registration/csi.civo.com /registration/csi.civo.com-reg.sock",
+                  ]
           env:
             - name: ADDRESS
               value: /csi/csi.sock
@@ -46,22 +51,6 @@ spec:
           env:
             - name: CSI_ENDPOINT
               value: unix:///csi/csi.sock
-            # TODO: I don't think the node actually needs these?
-            - name: REGION
-              valueFrom:
-                secretKeyRef:
-                  name: api-access
-                  key: region
-            - name: CIVO_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: api-access
-                  key: api-key
-            - name: CIVO_API_URL
-              valueFrom:
-                secretKeyRef:
-                  name: api-access
-                  key: api-url
           imagePullPolicy: "Always"
           securityContext:
             privileged: true
