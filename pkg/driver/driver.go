@@ -32,6 +32,7 @@ const SocketFilename string = "unix:///var/lib/kubelet/plugins/civo-csi/csi.sock
 // Driver implement the CSI endpoints for Identity, Node and Controller
 type Driver struct {
 	CivoClient     civogo.Clienter
+	DiskHotPlugger DiskHotPlugger
 	controller     bool
 	SocketFilename string
 	NodeInstanceID string
@@ -50,6 +51,7 @@ func NewDriver(apiURL, apiKey, region string) (*Driver, error) {
 	return &Driver{
 		CivoClient:     client,
 		Region:         region,
+		DiskHotPlugger: &RealDiskHotPlugger{},
 		controller:     (apiKey != ""),
 		SocketFilename: SocketFilename,
 		grpcServer:     &grpc.Server{},
@@ -59,10 +61,11 @@ func NewDriver(apiURL, apiKey, region string) (*Driver, error) {
 // NewTestDriver returns a new Civo CSI driver specifically setup to call a fake Civo API
 func NewTestDriver() (*Driver, error) {
 	d, err := NewDriver("https://civo-api.example.com", "NO_API_KEY_NEEDED", "TEST1")
-	d.CivoClient, _ = civogo.NewFakeClient()
 	d.SocketFilename = "unix:///tmp/civo-csi.sock"
-
+	d.CivoClient, _ = civogo.NewFakeClient()
+	d.DiskHotPlugger = &FakeDiskHotPlugger{}
 	d.TestMode = true // Just stops so much logging out of failures, as they are often expected during the tests
+
 	zerolog.SetGlobalLevel(zerolog.PanicLevel)
 
 	return d, err

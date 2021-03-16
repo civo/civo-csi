@@ -10,6 +10,9 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// MaxVolumesPerNode is the maximum number of volumes a single node may host
+const MaxVolumesPerNode int64 = 1024
+
 // NodeStageVolume is called after the volume is attached to the instance, so it can be partitioned, formatted and mounted to a staging path
 func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRequest) (*csi.NodeStageVolumeResponse, error) {
 	if req.VolumeId == "" {
@@ -22,9 +25,30 @@ func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRe
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeCapability to NodeStageVolume")
 	}
 
-	// Get the volume from the API using req.VolumeId
 	// Format the volume if not already formatted
+	formatted, err := d.DiskHotPlugger.IsFormatted(diskPathForVolume(req.VolumeId))
+	if err != nil {
+		return nil, err
+	}
+
+	if !formatted {
+		d.DiskHotPlugger.Format(diskPathForVolume(req.VolumeId), "ext4")
+	}
+
 	// Mount the volume if not already mounted
+	mounted, err := d.DiskHotPlugger.IsMounted(diskPathForVolume(req.VolumeId))
+	if err != nil {
+		return nil, err
+	}
+
+	if !mounted {
+		mount := req.VolumeCapability.GetMount()
+		options := []string{}
+		if mount != nil {
+			options = mount.MountFlags
+		}
+		d.DiskHotPlugger.Mount(diskPathForVolume(req.VolumeId), req.StagingTargetPath, "ext4", options...)
+	}
 
 	return &csi.NodeStageVolumeResponse{}, nil
 }
@@ -36,6 +60,15 @@ func (d *Driver) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolu
 	}
 	if req.StagingTargetPath == "" {
 		return nil, status.Error(codes.InvalidArgument, "must provide a StagingTargetPath to NodeUnstageVolume")
+	}
+
+	mounted, err := d.DiskHotPlugger.IsMounted(diskPathForVolume(req.VolumeId))
+	if err != nil {
+		return nil, err
+	}
+
+	if mounted {
+		d.DiskHotPlugger.Unmount(diskPathForVolume(req.VolumeId))
 	}
 
 	return &csi.NodeUnstageVolumeResponse{}, nil
@@ -56,6 +89,22 @@ func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolu
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeCapability to NodePublishVolume")
 	}
 
+	// Mount the volume if not already mounted
+	mounted, err := d.DiskHotPlugger.IsMounted(req.TargetPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if !mounted {
+		options := []string{
+			"bind",
+		}
+		if req.Readonly {
+			options = append(options, "ro")
+		}
+		d.DiskHotPlugger.Mount(req.StagingTargetPath, req.TargetPath, "ext4", options...)
+	}
+
 	return &csi.NodePublishVolumeResponse{}, nil
 }
 
@@ -68,19 +117,28 @@ func (d *Driver) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublish
 		return nil, status.Error(codes.InvalidArgument, "must provide a TargetPath to NodeUnpublishVolume")
 	}
 
+	mounted, err := d.DiskHotPlugger.IsMounted(req.TargetPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if mounted {
+		d.DiskHotPlugger.Unmount(req.TargetPath)
+	}
+
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
 
 // NodeGetInfo returns some identifier (ID, name) for the current node
 func (d *Driver) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
-	nodeInstanceID, region, err := getCurrentNodeDetails()
+	nodeInstanceID, region, err := currentNodeDetails()
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
 	return &csi.NodeGetInfoResponse{
 		NodeId:            nodeInstanceID,
-		MaxVolumesPerNode: 1024,
+		MaxVolumesPerNode: MaxVolumesPerNode,
 
 		// make sure that the driver works on this particular region only
 		AccessibleTopology: &csi.Topology{
@@ -124,22 +182,26 @@ type civostatsdConfig struct {
 	InstanceID string `toml:"instance_id"`
 }
 
-func getCurrentNodeDetails() (string, string, error) {
+func currentNodeDetails() (string, string, error) {
 	configFile := "/etc/civostatsd"
 
 	_, err := os.Stat(configFile)
 	if err != nil {
-		return getCurrentNodeDetailsFromEnv()
+		return currentNodeDetailsFromEnv()
 	}
 
 	var config civostatsdConfig
 	if _, err := toml.DecodeFile(configFile, &config); err != nil {
-		return getCurrentNodeDetailsFromEnv()
+		return currentNodeDetailsFromEnv()
 	}
 
 	return config.InstanceID, config.Region, nil
 }
 
-func getCurrentNodeDetailsFromEnv() (string, string, error) {
+func currentNodeDetailsFromEnv() (string, string, error) {
 	return os.Getenv("NODE_ID"), os.Getenv("REGION"), nil
+}
+
+func diskPathForVolume(ID string) string {
+	return "/dev/disk-by-id/" + ID
 }
