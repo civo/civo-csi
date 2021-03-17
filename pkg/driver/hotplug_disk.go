@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"github.com/rs/zerolog/log"
 )
 
 const BlikidNotFound int = 2
@@ -33,9 +35,11 @@ type RealDiskHotPlugger struct{}
 
 // Format erases the path with a new empty filesystem
 func (p *RealDiskHotPlugger) Format(path, filesystem string) error {
-	log, err := exec.Command(("mkfs." + filesystem), path).CombinedOutput()
+	log.Debug().Str("path", path).Msgf("Formatting with %s", filesystem)
+
+	output, err := exec.Command(("mkfs." + filesystem), path).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("Formatting with 'mkfs.%s %s' failed: %v log: %s", filesystem, path, err, string(log))
+		return fmt.Errorf("Formatting with 'mkfs.%s %s' failed: %v output: %s", filesystem, path, err, string(output))
 	}
 
 	return nil
@@ -47,11 +51,13 @@ func (p *RealDiskHotPlugger) Mount(path, mountpoint, filesystem string, flags ..
 
 	if filesystem == "" {
 		// Bind-mount requires a file to bind to
+		log.Debug().Str("path", path).Str("mountpoint", mountpoint).Msg("Bind mounting filesystem, making parent folder")
 		err := os.MkdirAll(filepath.Dir(mountpoint), 0750)
 		if err != nil {
 			return fmt.Errorf("creating mountpoint containing folder failed: %v", err)
 		}
 
+		log.Debug().Str("mountpoint", mountpoint).Msg("Making bind-mount file")
 		file, err := os.OpenFile(mountpoint, os.O_CREATE, 0660)
 		if err != nil {
 			return fmt.Errorf("failed to create target file for raw block bind mount: %v", err)
@@ -59,6 +65,8 @@ func (p *RealDiskHotPlugger) Mount(path, mountpoint, filesystem string, flags ..
 		file.Close()
 	} else {
 		// Block mounts require a folder to mount to
+		log.Debug().Str("mountpoint", mountpoint).Msg("Device mounting - ensuring folder exists")
+
 		err := os.MkdirAll(mountpoint, 0750)
 		if err != nil {
 			return fmt.Errorf("creating mountpoint failed: %v", err)
@@ -73,9 +81,11 @@ func (p *RealDiskHotPlugger) Mount(path, mountpoint, filesystem string, flags ..
 	args = append(args, path)
 	args = append(args, mountpoint)
 
-	log, err := exec.Command("mount", args...).CombinedOutput()
+	log.Debug().Str("path", path).Str("mountpoint", mountpoint).Msg("Mounting device")
+
+	output, err := exec.Command("mount", args...).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("Mounting with 'mount %s' failed: %v log: %s", strings.Join(args, " "), err, string(log))
+		return fmt.Errorf("Mounting with 'mount %s' failed: %v output: %s", strings.Join(args, " "), err, string(output))
 	}
 
 	return nil
@@ -83,9 +93,10 @@ func (p *RealDiskHotPlugger) Mount(path, mountpoint, filesystem string, flags ..
 
 // Unmount unmounts the given mountpoint
 func (p *RealDiskHotPlugger) Unmount(mountpoint string) error {
-	log, err := exec.Command("umount", mountpoint).CombinedOutput()
+	log.Debug().Str("mountpoint", mountpoint).Msg("Unmounting mountpoint")
+	output, err := exec.Command("umount", mountpoint).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("Unmounting with 'umount %s' failed: %v log: %s", mountpoint, err, string(log))
+		return fmt.Errorf("Unmounting with 'umount %s' failed: %v output: %s", mountpoint, err, string(output))
 	}
 
 	return nil

@@ -48,6 +48,8 @@ func NewDriver(apiURL, apiKey, region string) (*Driver, error) {
 		return nil, err
 	}
 
+	log.Info().Str("api_url", apiURL).Str("region", region).Msg("Created a new driver")
+
 	return &Driver{
 		CivoClient:     client,
 		Region:         region,
@@ -109,7 +111,7 @@ func (d *Driver) Run(ctx context.Context) error {
 	csi.RegisterControllerServer(d.grpcServer, d)
 	csi.RegisterNodeServer(d.grpcServer, d)
 
-	log.Info().Str("grpc_address", grpcAddress).Msg("starting server")
+	log.Debug().Str("grpc_address", grpcAddress).Msg("Starting gRPC server")
 
 	var eg errgroup.Group
 
@@ -120,6 +122,8 @@ func (d *Driver) Run(ctx context.Context) error {
 		}()
 		return d.grpcServer.Serve(grpcListener)
 	})
+
+	log.Debug().Str("grpc_address", grpcAddress).Msg("Running gRPC server")
 
 	return eg.Wait()
 }

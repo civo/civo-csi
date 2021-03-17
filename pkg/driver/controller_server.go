@@ -27,7 +27,8 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 	if req.VolumeCapabilities == nil || len(req.VolumeCapabilities) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "CreateVolume Volume capabilities must be provided")
 	}
-	log.Info().Str("name", req.Name).Interface("capabilities", req.VolumeCapabilities).Msg("creating volume")
+
+	log.Info().Str("name", req.Name).Interface("capabilities", req.VolumeCapabilities).Msg("Creating volume")
 
 	// Check capabilities
 	for _, cap := range req.VolumeCapabilities {
@@ -117,6 +118,7 @@ func (d *Driver) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest)
 	if err != nil {
 		return nil, err
 	}
+	log.Info().Str("volume_id", req.VolumeId).Msg("Volume deleted from Civo API")
 
 	return &csi.DeleteVolumeResponse{}, nil
 }
@@ -136,6 +138,7 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 	if err != nil {
 		return nil, err
 	}
+	log.Debug().Str("volume_id", volume.ID).Msg("Volume found in Civo API")
 
 	// Call the CivoAPI to attach it to a node/instance
 	if volume.InstanceID != req.NodeId {
@@ -144,6 +147,7 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 			return nil, err
 		}
 	}
+	log.Info().Str("volume_id", volume.ID).Str("instance_id", req.NodeId).Msg("Volume requested to be attached in Civo API")
 
 	return &csi.ControllerPublishVolumeResponse{}, nil
 }
@@ -163,6 +167,7 @@ func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.Control
 	if err != nil {
 		return nil, err
 	}
+	log.Debug().Str("volume_id", volume.ID).Msg("Volume found in Civo API")
 
 	// Call the CivoAPI to detach it, if it's attached to this node/instance
 	if volume.InstanceID == req.NodeId {
@@ -171,6 +176,7 @@ func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.Control
 			return nil, err
 		}
 	}
+	log.Info().Str("volume_id", volume.ID).Msg("Volume requested to be detached in Civo API")
 
 	return &csi.ControllerUnpublishVolumeResponse{}, nil
 }
@@ -219,11 +225,14 @@ func (d *Driver) ValidateVolumeCapabilities(ctx context.Context, req *csi.Valida
 
 // ListVolumes returns the existing Civo volumes for this customer
 func (d *Driver) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (*csi.ListVolumesResponse, error) {
+	log.Info().Msg("Requested all volumes")
+
 	// call the API to list all the volumes for this customer
 	volumes, err := d.CivoClient.ListVolumes()
 	if err != nil {
 		return nil, err
 	}
+	log.Debug().Msg("Retrieved all volumes from the Civo API")
 
 	resp := &csi.ListVolumesResponse{
 		Entries: []*csi.ListVolumesResponse_Entry{},

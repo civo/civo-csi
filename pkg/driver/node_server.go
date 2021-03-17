@@ -6,6 +6,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -24,6 +25,8 @@ func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRe
 	if req.VolumeCapability == nil {
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeCapability to NodeStageVolume")
 	}
+
+	log.Info().Str("volume_id", req.VolumeId).Str("path", req.StagingTargetPath).Msg("Formatting and mounting volume (staging)")
 
 	// Format the volume if not already formatted
 	formatted, err := d.DiskHotPlugger.IsFormatted(diskPathForVolume(req.VolumeId))
@@ -62,6 +65,8 @@ func (d *Driver) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolu
 		return nil, status.Error(codes.InvalidArgument, "must provide a StagingTargetPath to NodeUnstageVolume")
 	}
 
+	log.Info().Str("volume_id", req.VolumeId).Str("path", req.StagingTargetPath).Msg("Unmounting volume (unstaging)")
+
 	mounted, err := d.DiskHotPlugger.IsMounted(diskPathForVolume(req.VolumeId))
 	if err != nil {
 		return nil, err
@@ -88,6 +93,8 @@ func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolu
 	if req.VolumeCapability == nil {
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeCapability to NodePublishVolume")
 	}
+
+	log.Info().Str("volume_id", req.VolumeId).Str("from_path", req.StagingTargetPath).Str("to_path", req.TargetPath).Msg("Bind-mounting volume (publishing)")
 
 	// Mount the volume if not already mounted
 	mounted, err := d.DiskHotPlugger.IsMounted(req.TargetPath)
@@ -117,6 +124,8 @@ func (d *Driver) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublish
 		return nil, status.Error(codes.InvalidArgument, "must provide a TargetPath to NodeUnpublishVolume")
 	}
 
+	log.Info().Str("volume_id", req.VolumeId).Str("path", req.TargetPath).Msg("Removing bind-mount for volume (unpublishing)")
+
 	mounted, err := d.DiskHotPlugger.IsMounted(req.TargetPath)
 	if err != nil {
 		return nil, err
@@ -135,6 +144,8 @@ func (d *Driver) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoRequest) (
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+
+	log.Info().Str("node_id", nodeInstanceID).Str("region", region).Msg("Requested information about node")
 
 	return &csi.NodeGetInfoResponse{
 		NodeId:            nodeInstanceID,
@@ -187,11 +198,13 @@ func currentNodeDetails() (string, string, error) {
 
 	_, err := os.Stat(configFile)
 	if err != nil {
+		log.Debug().Msg("Node details file /etc/civostatsd doesn't existing, using ENVironment variables")
 		return currentNodeDetailsFromEnv()
 	}
 
 	var config civostatsdConfig
 	if _, err := toml.DecodeFile(configFile, &config); err != nil {
+		log.Debug().Msg("Node details file /etc/civostatsd isn't valid TOML, using ENVironment variables")
 		return currentNodeDetailsFromEnv()
 	}
 

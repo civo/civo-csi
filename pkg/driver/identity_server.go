@@ -4,10 +4,13 @@ import (
 	"context"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/rs/zerolog/log"
 )
 
 // GetPluginInfo returns the name and volume of our driver
 func (d *Driver) GetPluginInfo(context.Context, *csi.GetPluginInfoRequest) (*csi.GetPluginInfoResponse, error) {
+	log.Debug().Msg("Plugin name/version requested")
+
 	return &csi.GetPluginInfoResponse{
 		Name:          "com.civo.csi",
 		VendorVersion: Version,
@@ -16,6 +19,8 @@ func (d *Driver) GetPluginInfo(context.Context, *csi.GetPluginInfoRequest) (*csi
 
 // GetPluginCapabilities returns a list of the capabilities of this controller plugin
 func (d *Driver) GetPluginCapabilities(context.Context, *csi.GetPluginCapabilitiesRequest) (*csi.GetPluginCapabilitiesResponse, error) {
+	log.Debug().Msg("Plugin capabilities requested")
+
 	return &csi.GetPluginCapabilitiesResponse{
 		Capabilities: []*csi.PluginCapability{
 			{
