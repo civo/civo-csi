@@ -182,3 +182,63 @@ func TestListVolumes(t *testing.T) {
 		assert.Equal(t, volume.ID, resp.Entries[0].Volume.VolumeId)
 	})
 }
+
+func TestGetCapacity(t *testing.T) {
+	t.Run("Has available capacity from usage and limit", func(t *testing.T) {
+		d, _ := driver.NewTestDriver()
+
+		civoClient, _ := civogo.NewFakeClient()
+		d.CivoClient = civoClient
+
+		civoClient.Quota.DiskGigabytesUsage = 24
+		civoClient.Quota.DiskGigabytesLimit = 25
+
+		resp, err := d.GetCapacity(context.Background(), &csi.GetCapacityRequest{
+			VolumeCapabilities: []*csi.VolumeCapability{},
+			Parameters:         map[string]string{},
+			AccessibleTopology: &csi.Topology{},
+		})
+		assert.Nil(t, err)
+
+		assert.Equal(t, (1 * driver.BytesInGigabyte), resp.AvailableCapacity)
+	})
+
+	t.Run("Has no capacity from usage and limit", func(t *testing.T) {
+		d, _ := driver.NewTestDriver()
+
+		civoClient, _ := civogo.NewFakeClient()
+		d.CivoClient = civoClient
+
+		civoClient.Quota.DiskGigabytesUsage = 25
+		civoClient.Quota.DiskGigabytesLimit = 25
+
+		resp, err := d.GetCapacity(context.Background(), &csi.GetCapacityRequest{
+			VolumeCapabilities: []*csi.VolumeCapability{},
+			Parameters:         map[string]string{},
+			AccessibleTopology: &csi.Topology{},
+		})
+		assert.Nil(t, err)
+
+		assert.Equal(t, int64(0), resp.AvailableCapacity)
+	})
+
+	t.Run("Has no capacity from volume count limit", func(t *testing.T) {
+		d, _ := driver.NewTestDriver()
+
+		civoClient, _ := civogo.NewFakeClient()
+		d.CivoClient = civoClient
+
+		civoClient.Quota.DiskVolumeCountUsage = 10
+		civoClient.Quota.DiskVolumeCountLimit = 10
+
+		resp, err := d.GetCapacity(context.Background(), &csi.GetCapacityRequest{
+			VolumeCapabilities: []*csi.VolumeCapability{},
+			Parameters:         map[string]string{},
+			AccessibleTopology: &csi.Topology{},
+		})
+		assert.Nil(t, err)
+
+		assert.Equal(t, int64(0), resp.AvailableCapacity)
+	})
+
+}

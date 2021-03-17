@@ -10,7 +10,8 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-const bytesInGigabyte int64 = 1024 * 1024 * 1024
+// BytesInGigabyte describes how many bytes are in a gigabyte
+const BytesInGigabyte int64 = 1024 * 1024 * 1024
 
 var supportedAccessModes = []csi.VolumeCapability_AccessMode_Mode{
 	csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
@@ -48,15 +49,12 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 		return nil, err
 	}
 
-	desiredSize := bytes / bytesInGigabyte
-	if (bytes % bytesInGigabyte) != 0 {
+	desiredSize := bytes / BytesInGigabyte
+	if (bytes % BytesInGigabyte) != 0 {
 		desiredSize++
 	}
 
-	volumeName := req.GetName()
-	if len(volumeName) == 0 {
-		return nil, status.Error(codes.InvalidArgument, "Volume name not provided")
-	}
+	log.Debug().Int64("size_gb", desiredSize).Msg("Volume size determined")
 
 	// Ignore if volume already exists
 	volumes, err := d.CivoClient.ListVolumes()
@@ -64,11 +62,13 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 		return nil, err
 	}
 	for _, v := range volumes {
-		if v.Name == volumeName {
+		if v.Name == req.Name {
+			log.Debug().Str("id", v.ID).Msg("Volume already exists")
+
 			return &csi.CreateVolumeResponse{
 				Volume: &csi.Volume{
 					VolumeId:      v.ID,
-					CapacityBytes: int64(v.SizeGigabytes) * bytesInGigabyte,
+					CapacityBytes: int64(v.SizeGigabytes) * BytesInGigabyte,
 				},
 			}, nil
 		}
@@ -84,9 +84,11 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 		return nil, status.Error(codes.OutOfRange, "Volume would exceed quota")
 	}
 
+	log.Debug().Msg("Quota has sufficient capacity remaining")
+
 	// Create volume in Civo API
 	v := &civogo.VolumeConfig{
-		Name:          volumeName,
+		Name:          req.Name,
 		Region:        d.Region,
 		SizeGigabytes: int(desiredSize),
 	}
@@ -95,10 +97,12 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 		return nil, err
 	}
 
+	log.Info().Str("volume_id", volume.ID).Msg("Volume created in Civo API")
+
 	return &csi.CreateVolumeResponse{
 		Volume: &csi.Volume{
 			VolumeId:      volume.ID,
-			CapacityBytes: int64(v.SizeGigabytes) * bytesInGigabyte,
+			CapacityBytes: int64(v.SizeGigabytes) * BytesInGigabyte,
 		},
 	}, nil
 }
@@ -228,7 +232,7 @@ func (d *Driver) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (
 	for _, v := range volumes {
 		resp.Entries = append(resp.Entries, &csi.ListVolumesResponse_Entry{
 			Volume: &csi.Volume{
-				CapacityBytes: int64(v.SizeGigabytes) * bytesInGigabyte,
+				CapacityBytes: int64(v.SizeGigabytes) * BytesInGigabyte,
 				VolumeId:      v.ID,
 				ContentSource: &csi.VolumeContentSource{
 					Type: &csi.VolumeContentSource_Volume{},
@@ -243,10 +247,27 @@ func (d *Driver) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (
 
 // GetCapacity calls the Civo API to determine the user's available quota
 func (d *Driver) GetCapacity(context.Context, *csi.GetCapacityRequest) (*csi.GetCapacityResponse, error) {
+	log.Info().Msg("Requested available capacity in client's quota")
+
 	// Call the Civo API to get capacity from the quota (disk_gb_limit - disk_gb_usage)
+	quota, err := d.CivoClient.GetQuota()
+	if err != nil {
+		return nil, err
+	}
+
+	availableBytes := int64(quota.DiskGigabytesLimit-quota.DiskGigabytesUsage) * BytesInGigabyte
+	log.Debug().Int64("available_gb", availableBytes/BytesInGigabyte).Msg("Available capacity determined")
+	if availableBytes < BytesInGigabyte {
+		log.Error().Int64("available_bytes", availableBytes).Msg("Available capacity is less than 1GB, volumes can't be launched")
+	}
+
+	if quota.DiskVolumeCountUsage >= quota.DiskVolumeCountLimit {
+		log.Error().Msg("Number of volumes is at the quota limit, no capacity left")
+		availableBytes = 0
+	}
 
 	resp := &csi.GetCapacityResponse{
-		AvailableCapacity: 1000000,
+		AvailableCapacity: availableBytes,
 	}
 
 	return resp, nil
@@ -300,7 +321,7 @@ func getVolSizeInBytes(req *csi.CreateVolumeRequest) (int64, error) {
 
 	capRange := req.GetCapacityRange()
 	if capRange == nil {
-		return int64(DefaultVolumeSizeGB) * bytesInGigabyte, nil
+		return int64(DefaultVolumeSizeGB) * BytesInGigabyte, nil
 	}
 
 	// Volumes can be of a flexible size, but they must specify one of the fields, so we'll use that
