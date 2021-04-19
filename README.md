@@ -44,6 +44,10 @@ At this point the volume still exists and still contains data. If the operator w
 
 No currently known issues.
 
+## Workflow
+
+![volumeworkflow](./images/volumeworkflow.png)
+
 ## Development
 
 Normally for our Civo Kubernetes integrations we'd recommend visiting the [getting started document for CivoStack](https://github.com/civo/civo-stack/blob/master/GETTING_STARTED.md) guide, but this is a different situation (installed on the client cluster, not the supercluster), so below are some similar sort of steps to get you started:
@@ -58,7 +62,7 @@ So the way we test our work is:
 
 The CSI Sanity suite is integrated as well as some custom unit tests and is a simple `go test` away 🥳
 
-This will run the full Kubernetes Storage SIG's suiet of tests against the endpoints we're supposed to have implemented to comply with the spec.
+This will run the full Kubernetes Storage SIG's suit of tests against the endpoints we're supposed to have implemented to comply with the spec.
 
 #### B. Install in to a cluster
 
