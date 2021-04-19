@@ -4,5 +4,5 @@ metadata:
   name: civo-volume
   annotations:
     storageclass.kubernetes.io/is-default-class: "true"
-provisioner: csi.digitalocean.com
+provisioner: csi.civo.com
 allowVolumeExpansion: true
