@@ -17,13 +17,7 @@ correct nodes and promoting the storage into the cluster as a Persistent Volume.
 * We need to enable [dynamic provisioning](https://kubernetes.io/blog/2019/01/15/container-storage-interface-ga/#dynamic-provisioning)
 * We're going to build a single binary and use the sidecars to register the appropriate parts of it in the appropriate place (one part runs on the control plane as a deployment, the other part runs on each node as a DaemonSet)
 
-## Known issues
-
-No currently known issues.
-
 ## Getting started
-
-Normally for our Civo Kubernetes integrations we'd recommend visiting the [getting started document for CivoStack](https://github.com/civo/civo-stack/blob/master/GETTING_STARTED.md) guide, but this is a different situation (installed on the client cluster, not the supercluster), so below are some similar sort of steps to get you started:
 
 There are three parts to a CSI driver - node, controller and identity. The easiest way to think about these is:
 
@@ -45,6 +39,14 @@ The order for calls is usually:
 10. Finally the volume is detached from the instance within Civo's API with Controller's `ControllerUnpublishVolume`.
 
 At this point the volume still exists and still contains data. If the operator wants to delete it, then the `kubectl pv delete ...` will actually call Controller's `DeleteVolume`. If a PV is requested, the Kubernetes control plane will ensure space is available with Controller's `GetCapacity`, and if the operator lists all volumes this is done with Controller's `ListVolumes`.
+
+## Known issues
+
+No currently known issues.
+
+## Development
+
+Normally for our Civo Kubernetes integrations we'd recommend visiting the [getting started document for CivoStack](https://github.com/civo/civo-stack/blob/master/GETTING_STARTED.md) guide, but this is a different situation (installed on the client cluster, not the supercluster), so below are some similar sort of steps to get you started:
 
 ### How do I run the driver in development
 
