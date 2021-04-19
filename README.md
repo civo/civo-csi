@@ -25,17 +25,38 @@ No currently known issues.
 
 Normally for our Civo Kubernetes integrations we'd recommend visiting the [getting started document for CivoStack](https://github.com/civo/civo-stack/blob/master/GETTING_STARTED.md) guide, but this is a different situation (installed on the client cluster, not the supercluster), so below are some similar sort of steps to get you started:
 
+There are three parts to a CSI driver - node, controller and identity. The easiest way to think about these is:
+
+* *identity* just identifies the driver itself: version, capabilities and a probe call to see if it's still alive
+* *controller* is responsible for communicating with the external API, to check capacity and provision real world resources, and attach them to the node
+* *node* is for after the volume is attached to the underlying node - formatting and mounting it
+
+The order for calls is usually:
+
+1. CSI driver launches and Identity's `GetPluginCapabilities` is called
+2. On an ongoing and regular basis Identity's `Probe` is called
+3. When a pod requests a PV (dynamically created from a PVC), Controller's `CreateVolume` is called to create it in the Civo API
+4. The Kubernetes control plane then calls Controller's `ControllerPublishVolume` to attach the volume to the correct node
+5. After the volume is attached Node's `NodeStageVolume` is called to format the volume (if not already formatted) and mount it to a node-wide set of mount points
+6. When the volume is formatted and mounted, Node's `NodePublishVolume` is called to bind mount that mount point into the pod's specific mount point.
+7. Then the volume is in use normally by the pod. When it's finished with...
+8. The bind-mount for the volume is removed with Node's `NodeUnpublishVolume`
+9. Then the actual volume is unmounted with Node's `NodeUnstageVolume`.
+10. Finally the volume is detached from the instance within Civo's API with Controller's `ControllerUnpublishVolume`.
+
+At this point the volume still exists and still contains data. If the operator wants to delete it, then the `kubectl pv delete ...` will actually call Controller's `DeleteVolume`. If a PV is requested, the Kubernetes control plane will ensure space is available with Controller's `GetCapacity`, and if the operator lists all volumes this is done with Controller's `ListVolumes`.
+
 ### How do I run the driver in development
 
-Unlike Operators, you can't as easily run CSI drivers locally just connected in to a cluster (there is a way with `socat` and forwarding Unix sockets, but we haven't experimented with that).
+Unlike Operators, you can't as easily run CSI drivers locally just connected in to a cluster (there is a way with `socat` and forwarding Unix sockets, but we haven't experimented with that yet).
 
 So the way we test our work is:
 
-#### A. Run the CSI Sanity test suite
+#### A. Run the test suite
 
-This is already integrated and is a simple `go test` away 🥳
+The CSI Sanity suite is integrated as well as some custom unit tests and is a simple `go test` away 🥳
 
-This will run the full Kubernetes Storage SIG's suiet of tests against the endpoints you're supposed to have implemented.
+This will run the full Kubernetes Storage SIG's suiet of tests against the endpoints we're supposed to have implemented to comply with the spec.
 
 #### B. Install in to a cluster
 
