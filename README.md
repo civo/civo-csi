@@ -62,7 +62,7 @@ So the way we test our work is:
 
 The CSI Sanity suite is integrated as well as some custom unit tests and is a simple `go test` away 🥳
 
-This will run the full Kubernetes Storage SIG's suit of tests against the endpoints we're supposed to have implemented to comply with the spec.
+This will run the full Kubernetes Storage SIG's suite of tests against the endpoints we're supposed to have implemented to comply with the spec.
 
 #### B. Install in to a cluster
 
