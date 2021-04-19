@@ -19,7 +19,7 @@ correct nodes and promoting the storage into the cluster as a Persistent Volume.
 
 ## Getting started
 
-There are three parts to a CSI driver - node, controller and identity. The easiest way to think about these is:
+There are three parts to a CSI driver - [node](pkg/driver/node_server.go), [controller](pkg/driver/controller_server.go) and [identity](pkg/driver/identity_server.go). The easiest way to think about these is:
 
 * *identity* just identifies the driver itself: version, capabilities and a probe call to see if it's still alive
 * *controller* is responsible for communicating with the external API, to check capacity and provision real world resources, and attach them to the node
