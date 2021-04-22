@@ -5,4 +5,4 @@ metadata:
   annotations:
     storageclass.kubernetes.io/is-default-class: "true"
 provisioner: csi.civo.com
-allowVolumeExpansion: true
+allowVolumeExpansion: false
