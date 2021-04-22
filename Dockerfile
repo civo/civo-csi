@@ -15,17 +15,19 @@ RUN go mod verify
 RUN find .
 
 # Build the binary.
-RUN GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /app/civo-csi
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /app/civo-csi
 
 
 ############################
 # STEP 2 build a small image
 ############################
-FROM scratch
+FROM alpine:latest
 
 # Copy our static executable
 WORKDIR /app
 COPY --from=builder /app/civo-csi /app/civo-csi
+
+RUN chmod +x /app/civo-csi
 
 # Run the civo-csi binary
 ENTRYPOINT ["/app/civo-csi"]
