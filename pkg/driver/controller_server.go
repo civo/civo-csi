@@ -303,6 +303,8 @@ func (d *Driver) ControllerGetCapabilities(context.Context, *csi.ControllerGetCa
 		})
 	}
 
+	log.Debug().Interface("capabilities", csc).Msg("Capabilities for controller requested")
+
 	resp := &csi.ControllerGetCapabilitiesResponse{
 		Capabilities: csc,
 	}

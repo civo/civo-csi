@@ -26,8 +26,8 @@ const Version string = "0.0.1"
 // DefaultVolumeSizeGB is the default size in Gigabytes of an unspecified volume
 const DefaultVolumeSizeGB int = 10
 
-// SocketFilename is the location of the Unix domain socket for this driver
-const SocketFilename string = "unix:///var/lib/kubelet/plugins/civo-csi/csi.sock"
+// DefaultSocketFilename is the location of the Unix domain socket for this driver
+const DefaultSocketFilename string = "unix:///var/lib/kubelet/plugins/civo-csi/csi.sock"
 
 // Driver implement the CSI endpoints for Identity, Node and Controller
 type Driver struct {
@@ -43,19 +43,29 @@ type Driver struct {
 
 // NewDriver returns a CSI driver that implements gRPC endpoints for CSI
 func NewDriver(apiURL, apiKey, region string) (*Driver, error) {
-	client, err := civogo.NewClientWithURL(apiKey, apiURL, region)
-	if err != nil {
-		return nil, err
+	var client *civogo.Client
+	var err error
+
+	if apiKey != "" {
+		client, err = civogo.NewClientWithURL(apiKey, apiURL, region)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	log.Info().Str("api_url", apiURL).Str("region", region).Msg("Created a new driver")
+	socketFilename := os.Getenv("CSI_ENDPOINT")
+	if socketFilename == "" {
+		socketFilename = DefaultSocketFilename
+	}
+
+	log.Info().Str("api_url", apiURL).Str("region", region).Str("socketFilename", socketFilename).Msg("Created a new driver")
 
 	return &Driver{
 		CivoClient:     client,
 		Region:         region,
 		DiskHotPlugger: &RealDiskHotPlugger{},
 		controller:     (apiKey != ""),
-		SocketFilename: SocketFilename,
+		SocketFilename: socketFilename,
 		grpcServer:     &grpc.Server{},
 	}, nil
 }
@@ -75,22 +85,28 @@ func NewTestDriver() (*Driver, error) {
 
 // Run the driver's gRPC server
 func (d *Driver) Run(ctx context.Context) error {
+	log.Debug().Str("socketFilename", d.SocketFilename).Msg("Parsing the socket filename to make a gRPC server")
 	urlParts, _ := url.Parse(d.SocketFilename)
+	log.Debug().Msg("Parsed socket filename")
 
 	grpcAddress := path.Join(urlParts.Host, filepath.FromSlash(urlParts.Path))
 	if urlParts.Host == "" {
 		grpcAddress = filepath.FromSlash(urlParts.Path)
 	}
+	log.Debug().Msg("Generated gRPC address")
 
 	// remove any existing left-over socket
 	if err := os.Remove(grpcAddress); err != nil && !os.IsNotExist(err) {
+		log.Error().Msgf("failed to remove unix domain socket file %s, error: %s", grpcAddress, err)
 		return fmt.Errorf("failed to remove unix domain socket file %s, error: %s", grpcAddress, err)
 	}
+	log.Debug().Msg("Removed any exsting old socket")
 
 	grpcListener, err := net.Listen(urlParts.Scheme, grpcAddress)
 	if err != nil {
 		return fmt.Errorf("failed to listen: %v", err)
 	}
+	log.Debug().Msg("Created gRPC listener")
 
 	// log gRPC response errors for better observability
 	errHandler := func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
@@ -106,10 +122,14 @@ func (d *Driver) Run(ctx context.Context) error {
 	} else {
 		d.grpcServer = grpc.NewServer(grpc.UnaryInterceptor(errHandler))
 	}
+	log.Debug().Msg("Created new RPC server")
 
 	csi.RegisterIdentityServer(d.grpcServer, d)
+	log.Debug().Msg("Registered Identity server")
 	csi.RegisterControllerServer(d.grpcServer, d)
+	log.Debug().Msg("Registered Controller server")
 	csi.RegisterNodeServer(d.grpcServer, d)
+	log.Debug().Msg("Registered Node server")
 
 	log.Debug().Str("grpc_address", grpcAddress).Msg("Starting gRPC server")
 
@@ -118,12 +138,14 @@ func (d *Driver) Run(ctx context.Context) error {
 	eg.Go(func() error {
 		go func() {
 			<-ctx.Done()
+			log.Debug().Msg("Stopping gRPC because the context was cancelled")
 			d.grpcServer.GracefulStop()
 		}()
+		log.Debug().Msg("Awaiting gRPC requests")
 		return d.grpcServer.Serve(grpcListener)
 	})
 
-	log.Debug().Str("grpc_address", grpcAddress).Msg("Running gRPC server")
+	log.Debug().Str("grpc_address", grpcAddress).Msg("Running gRPC server, waiting for a signal to quit the process...")
 
 	return eg.Wait()
 }
