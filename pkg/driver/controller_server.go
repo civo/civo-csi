@@ -20,6 +20,8 @@ var supportedAccessModes = []csi.VolumeCapability_AccessMode_Mode{
 
 // CreateVolume is the first step when a PVC tries to create a dynamic volume
 func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
+	log.Info().Msg("Request: CreateVolume")
+
 	if req.Name == "" {
 		return nil, status.Error(codes.InvalidArgument, "CreateVolume Name must be provided")
 	}
@@ -60,11 +62,12 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 	// Ignore if volume already exists
 	volumes, err := d.CivoClient.ListVolumes()
 	if err != nil {
+		log.Error().Err(err).Msg("Unable to list volumes in Civo API")
 		return nil, err
 	}
 	for _, v := range volumes {
 		if v.Name == req.Name {
-			log.Debug().Str("id", v.ID).Msg("Volume already exists")
+			log.Debug().Str("volume_id", v.ID).Msg("Volume already exists")
 
 			return &csi.CreateVolumeResponse{
 				Volume: &csi.Volume{
@@ -78,6 +81,7 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 	// Check quota
 	quota, err := d.CivoClient.GetQuota()
 	if err != nil {
+		log.Error().Err(err).Msg("Unable to get quota from Civo API")
 		return nil, err
 	}
 	availableSize := int64(quota.DiskGigabytesLimit - quota.DiskGigabytesUsage)
@@ -85,7 +89,7 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 		return nil, status.Error(codes.OutOfRange, "Volume would exceed quota")
 	}
 
-	log.Debug().Msg("Quota has sufficient capacity remaining")
+	log.Debug().Int("disk_gb_limit", quota.DiskGigabytesLimit).Int("disk_gb_usage", quota.DiskGigabytesUsage).Msg("Quota has sufficient capacity remaining")
 
 	// Create volume in Civo API
 	v := &civogo.VolumeConfig{
@@ -93,8 +97,10 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 		Region:        d.Region,
 		SizeGigabytes: int(desiredSize),
 	}
+	log.Debug().Msg("Creating volume in Civo API")
 	volume, err := d.CivoClient.NewVolume(v)
 	if err != nil {
+		log.Error().Err(err).Msg("Unable to create volume in Civo API")
 		return nil, err
 	}
 
@@ -110,12 +116,16 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 
 // DeleteVolume is used once a volume is unused and therefore unmounted, to stop the resources being used and subsequent billing
 func (d *Driver) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest) (*csi.DeleteVolumeResponse, error) {
+	log.Info().Str("volume_id", req.VolumeId).Msg("Request: DeleteVolume")
+
 	if req.VolumeId == "" {
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to DeleteVolume")
 	}
 
+	log.Debug().Msg("Deleting volume in Civo API")
 	_, err := d.CivoClient.DeleteVolume(req.VolumeId)
 	if err != nil {
+		log.Error().Err(err).Msg("Unable to delete volume in Civo API")
 		return nil, err
 	}
 	log.Info().Str("volume_id", req.VolumeId).Msg("Volume deleted from Civo API")
@@ -125,6 +135,8 @@ func (d *Driver) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest)
 
 // ControllerPublishVolume is used to mount an underlying volume to required k3s node
 func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.ControllerPublishVolumeRequest) (*csi.ControllerPublishVolumeResponse, error) {
+	log.Info().Str("volume_id", req.VolumeId).Msg("Request: ControllerPublishVolume")
+
 	if req.VolumeId == "" {
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to ControllerPublishVolume")
 	}
@@ -133,27 +145,32 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 		return nil, status.Error(codes.InvalidArgument, "must provide a NodeId to ControllerPublishVolume")
 	}
 
-	// Find the volume
+	log.Debug().Msg("Finding volume in Civo API")
 	volume, err := d.CivoClient.FindVolume(req.VolumeId)
 	if err != nil {
+		log.Error().Err(err).Msg("Unable to delete volume in Civo API")
 		return nil, err
 	}
 	log.Debug().Str("volume_id", volume.ID).Msg("Volume found in Civo API")
 
 	// Call the CivoAPI to attach it to a node/instance
 	if volume.InstanceID != req.NodeId {
+		log.Debug().Str("volume_id", volume.ID).Str("instance_id", req.NodeId).Msg("Attaching volume to instance in Civo API")
 		_, err = d.CivoClient.AttachVolume(req.VolumeId, req.NodeId)
 		if err != nil {
+			log.Error().Err(err).Msg("Unable to attach volume in Civo API")
 			return nil, err
 		}
 	}
-	log.Info().Str("volume_id", volume.ID).Str("instance_id", req.NodeId).Msg("Volume requested to be attached in Civo API")
+	log.Info().Str("volume_id", volume.ID).Str("instance_id", req.NodeId).Msg("Volume successfully requested to be attached in Civo API")
 
 	return &csi.ControllerPublishVolumeResponse{}, nil
 }
 
 // ControllerUnpublishVolume detaches the volume from the k3s node it was connected
 func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.ControllerUnpublishVolumeRequest) (*csi.ControllerUnpublishVolumeResponse, error) {
+	log.Info().Str("volume_id", req.VolumeId).Msg("Request: ControllerUnpublishVolume")
+
 	if req.VolumeId == "" {
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to ControllerUnpublishVolume")
 	}
@@ -162,21 +179,24 @@ func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.Control
 		return nil, status.Error(codes.InvalidArgument, "must provide a NodeId to ControllerUnpublishVolume")
 	}
 
-	// Find the volume
+	log.Debug().Msg("Finding volume in Civo API")
 	volume, err := d.CivoClient.FindVolume(req.VolumeId)
 	if err != nil {
+		log.Error().Err(err).Msg("Unable to delete volume in Civo API")
 		return nil, err
 	}
 	log.Debug().Str("volume_id", volume.ID).Msg("Volume found in Civo API")
 
 	// Call the CivoAPI to detach it, if it's attached to this node/instance
 	if volume.InstanceID == req.NodeId {
+		log.Debug().Str("volume_id", volume.ID).Str("instance_id", req.NodeId).Msg("Detaching volume from instance in Civo API")
 		_, err = d.CivoClient.DetachVolume(req.VolumeId)
 		if err != nil {
+			log.Error().Err(err).Msg("Unable to detach volume in Civo API")
 			return nil, err
 		}
 	}
-	log.Info().Str("volume_id", volume.ID).Msg("Volume requested to be detached in Civo API")
+	log.Info().Str("volume_id", volume.ID).Msg("Volume sucessfully requested to be detached in Civo API")
 
 	return &csi.ControllerUnpublishVolumeResponse{}, nil
 }
@@ -193,6 +213,8 @@ func (d *Driver) ControllerGetVolume(context.Context, *csi.ControllerGetVolumeRe
 
 // ValidateVolumeCapabilities returns the features of the volume, e.g. RW, RO, RWX
 func (d *Driver) ValidateVolumeCapabilities(ctx context.Context, req *csi.ValidateVolumeCapabilitiesRequest) (*csi.ValidateVolumeCapabilitiesResponse, error) {
+	log.Info().Str("volume_id", req.VolumeId).Msg("Request: ValidateVolumeCapabilities")
+
 	if req.VolumeId == "" {
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to ValidateVolumeCapabilities")
 	}
@@ -225,14 +247,15 @@ func (d *Driver) ValidateVolumeCapabilities(ctx context.Context, req *csi.Valida
 
 // ListVolumes returns the existing Civo volumes for this customer
 func (d *Driver) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (*csi.ListVolumesResponse, error) {
-	log.Info().Msg("Requested all volumes")
+	log.Info().Msg("Request: ListVolumes")
 
-	// call the API to list all the volumes for this customer
+	log.Debug().Msg("Listing all volume in Civo API")
 	volumes, err := d.CivoClient.ListVolumes()
 	if err != nil {
+		log.Error().Err(err).Msg("Unable to list volumes in Civo API")
 		return nil, err
 	}
-	log.Debug().Msg("Retrieved all volumes from the Civo API")
+	log.Debug().Msg("Successfully retrieved all volumes from the Civo API")
 
 	resp := &csi.ListVolumesResponse{
 		Entries: []*csi.ListVolumesResponse_Entry{},
@@ -256,13 +279,15 @@ func (d *Driver) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (
 
 // GetCapacity calls the Civo API to determine the user's available quota
 func (d *Driver) GetCapacity(context.Context, *csi.GetCapacityRequest) (*csi.GetCapacityResponse, error) {
-	log.Info().Msg("Requested available capacity in client's quota")
+	log.Info().Msg("Request: GetCapacity")
 
-	// Call the Civo API to get capacity from the quota (disk_gb_limit - disk_gb_usage)
+	log.Debug().Msg("Requesting available capacity in client's quota from the Civo API")
 	quota, err := d.CivoClient.GetQuota()
 	if err != nil {
+		log.Error().Err(err).Msg("Unable to get quota in Civo API")
 		return nil, err
 	}
+	log.Debug().Msg("Successfully retrieved quota from the Civo API")
 
 	availableBytes := int64(quota.DiskGigabytesLimit-quota.DiskGigabytesUsage) * BytesInGigabyte
 	log.Debug().Int64("available_gb", availableBytes/BytesInGigabyte).Msg("Available capacity determined")
@@ -284,6 +309,8 @@ func (d *Driver) GetCapacity(context.Context, *csi.GetCapacityRequest) (*csi.Get
 
 // ControllerGetCapabilities returns the capabilities of the controller, what features it implements
 func (d *Driver) ControllerGetCapabilities(context.Context, *csi.ControllerGetCapabilitiesRequest) (*csi.ControllerGetCapabilitiesResponse, error) {
+	log.Info().Msg("Request: ControllerGetCapabilities")
+
 	rawCapabilities := []csi.ControllerServiceCapability_RPC_Type{
 		csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
 		csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME,

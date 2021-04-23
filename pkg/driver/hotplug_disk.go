@@ -35,7 +35,7 @@ type RealDiskHotPlugger struct{}
 
 // Format erases the path with a new empty filesystem
 func (p *RealDiskHotPlugger) Format(path, filesystem string) error {
-	log.Debug().Str("path", path).Msgf("Formatting with %s", filesystem)
+	log.Debug().Str("path", path).Str("filesyste,", filesystem).Msg("Formatting")
 
 	output, err := exec.Command(("mkfs." + filesystem), path).CombinedOutput()
 	if err != nil {
@@ -47,6 +47,7 @@ func (p *RealDiskHotPlugger) Format(path, filesystem string) error {
 
 // Mount the path to the mountpoint, specifying the current filesystem and mount flags to use
 func (p *RealDiskHotPlugger) Mount(path, mountpoint, filesystem string, flags ...string) error {
+	log.Debug().Str("path", path).Str("filesystem", filesystem).Str("mountpoint", mountpoint).Msg("Mounting")
 	args := []string{}
 
 	if filesystem == "" {
@@ -87,6 +88,7 @@ func (p *RealDiskHotPlugger) Mount(path, mountpoint, filesystem string, flags ..
 	if err != nil {
 		return fmt.Errorf("Mounting with 'mount %s' failed: %v output: %s", strings.Join(args, " "), err, string(output))
 	}
+	log.Debug().Str("path", path).Str("filesystem", filesystem).Str("mountpoint", mountpoint).Msg("Mounting succeeded")
 
 	return nil
 }
@@ -104,6 +106,7 @@ func (p *RealDiskHotPlugger) Unmount(mountpoint string) error {
 
 // IsFormatted returns true if the device path is already formatted
 func (p *RealDiskHotPlugger) IsFormatted(path string) (bool, error) {
+	log.Debug().Str("path", path).Msg("Checking if path is formatted")
 	if path == "" {
 		return false, errors.New("path is not empty")
 	}
@@ -111,6 +114,7 @@ func (p *RealDiskHotPlugger) IsFormatted(path string) (bool, error) {
 	_, err := exec.LookPath("blkid")
 	if err != nil {
 		if err == exec.ErrNotFound {
+			log.Error().Msg("Could not find 'blkid' in $PATH")
 			return false, fmt.Errorf("blkid executable not found in $PATH")
 		}
 		return false, err
@@ -123,27 +127,35 @@ func (p *RealDiskHotPlugger) IsFormatted(path string) (bool, error) {
 	if err != nil {
 		exitError, ok := err.(*exec.ExitError)
 		if !ok {
+			log.Error().Err(err).Msg("Unable to determine if device is formatted")
 			return false, fmt.Errorf("is device formatted err: %v cmd: blkid %q", err, args)
 		}
+
 		exitCode := exitError.Sys().(syscall.WaitStatus).ExitStatus()
 		if exitCode == BlikidNotFound {
+			log.Debug().Str("path", path).Msg("Path is not formatted")
 			return false, nil
 		}
+
+		log.Error().Err(err).Msg("Unable to determine if device is formatted")
 		return false, fmt.Errorf("is device formatted err: %v cmd: blkid %q", err, args)
 	}
 
+	log.Debug().Str("path", path).Msg("Path is formatted")
 	return true, nil
 }
 
 // IsMounted returns true if the target has a disk mounted there
 func (p *RealDiskHotPlugger) IsMounted(path string) (bool, error) {
+	log.Debug().Str("path", path).Msg("Checking if path is mounted")
 	if path == "" {
-		return false, errors.New("path is not empty")
+		return false, errors.New("path is empty")
 	}
 
 	_, err := exec.LookPath("findmnt")
 	if err != nil {
 		if err == exec.ErrNotFound {
+			log.Error().Msg("Could not find 'findmnt' in $PATH")
 			return false, fmt.Errorf("findmnt executable not found in $PATH")
 		}
 		return false, err
@@ -153,16 +165,14 @@ func (p *RealDiskHotPlugger) IsMounted(path string) (bool, error) {
 	cmd := exec.Command("findmnt", args...)
 	err = cmd.Run()
 	if err != nil {
-		exitError, ok := err.(*exec.ExitError)
+		_, ok := err.(*exec.ExitError)
 		if !ok {
+			log.Error().Err(err).Msg("Unable to determine if device is mounted")
 			return false, fmt.Errorf("is device mounted err: %v cmd: findmnt %q", err, args)
 		}
-		exitCode := exitError.Sys().(syscall.WaitStatus).ExitStatus()
-		if exitCode == BlikidNotFound {
-			return false, nil
-		}
-		return false, fmt.Errorf("is device mounted err: %v cmd: findmnt %q", err, args)
 	}
+
+	log.Debug().Str("path", path).Msg("Path is mounted")
 
 	return true, nil
 }

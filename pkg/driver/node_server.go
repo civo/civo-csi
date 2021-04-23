@@ -16,6 +16,8 @@ const MaxVolumesPerNode int64 = 1024
 
 // NodeStageVolume is called after the volume is attached to the instance, so it can be partitioned, formatted and mounted to a staging path
 func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRequest) (*csi.NodeStageVolumeResponse, error) {
+	log.Info().Str("volume_id", req.VolumeId).Str("staging_target_path", req.StagingTargetPath).Msg("Request: NodeStageVolume")
+
 	if req.VolumeId == "" {
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to NodeStageVolume")
 	}
@@ -26,13 +28,14 @@ func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRe
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeCapability to NodeStageVolume")
 	}
 
-	log.Info().Str("volume_id", req.VolumeId).Str("path", req.StagingTargetPath).Msg("Formatting and mounting volume (staging)")
+	log.Debug().Str("volume_id", req.VolumeId).Msg("Formatting and mounting volume (staging)")
 
 	// Format the volume if not already formatted
 	formatted, err := d.DiskHotPlugger.IsFormatted(diskPathForVolume(req.VolumeId))
 	if err != nil {
 		return nil, err
 	}
+	log.Debug().Str("volume_id", req.VolumeId).Bool("formatted", formatted).Msg("Is currently formatted?")
 
 	if !formatted {
 		d.DiskHotPlugger.Format(diskPathForVolume(req.VolumeId), "ext4")
@@ -43,6 +46,7 @@ func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRe
 	if err != nil {
 		return nil, err
 	}
+	log.Debug().Str("volume_id", req.VolumeId).Bool("mounted", formatted).Msg("Is currently mounted?")
 
 	if !mounted {
 		mount := req.VolumeCapability.GetMount()
@@ -58,6 +62,8 @@ func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRe
 
 // NodeUnstageVolume unmounts the volume when it's finished with, ready for deletion
 func (d *Driver) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolumeRequest) (*csi.NodeUnstageVolumeResponse, error) {
+	log.Info().Str("volume_id", req.VolumeId).Str("staging_target_path", req.StagingTargetPath).Msg("Request: NodeUnstageVolume")
+
 	if req.VolumeId == "" {
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to NodeUnstageVolume")
 	}
@@ -65,12 +71,13 @@ func (d *Driver) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolu
 		return nil, status.Error(codes.InvalidArgument, "must provide a StagingTargetPath to NodeUnstageVolume")
 	}
 
-	log.Info().Str("volume_id", req.VolumeId).Str("path", req.StagingTargetPath).Msg("Unmounting volume (unstaging)")
+	log.Debug().Str("volume_id", req.VolumeId).Str("path", req.StagingTargetPath).Msg("Unmounting volume (unstaging)")
 
 	mounted, err := d.DiskHotPlugger.IsMounted(diskPathForVolume(req.VolumeId))
 	if err != nil {
 		return nil, err
 	}
+	log.Debug().Str("volume_id", req.VolumeId).Bool("mounted", mounted).Msg("Checking if currently mounting")
 
 	if mounted {
 		d.DiskHotPlugger.Unmount(diskPathForVolume(req.VolumeId))
@@ -81,6 +88,8 @@ func (d *Driver) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolu
 
 // NodePublishVolume bind mounts the staging path into the container
 func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
+	log.Info().Str("volume_id", req.VolumeId).Str("staging_target_path", req.StagingTargetPath).Str("target_path", req.TargetPath).Msg("Request: NodePublishVolume")
+
 	if req.VolumeId == "" {
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to NodePublishVolume")
 	}
@@ -94,13 +103,14 @@ func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolu
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeCapability to NodePublishVolume")
 	}
 
-	log.Info().Str("volume_id", req.VolumeId).Str("from_path", req.StagingTargetPath).Str("to_path", req.TargetPath).Msg("Bind-mounting volume (publishing)")
+	log.Debug().Str("volume_id", req.VolumeId).Str("from_path", req.StagingTargetPath).Str("to_path", req.TargetPath).Msg("Bind-mounting volume (publishing)")
 
 	// Mount the volume if not already mounted
 	mounted, err := d.DiskHotPlugger.IsMounted(req.TargetPath)
 	if err != nil {
 		return nil, err
 	}
+	log.Debug().Str("volume_id", req.VolumeId).Bool("mounted", mounted).Msg("Checking if currently mounting")
 
 	if !mounted {
 		options := []string{
@@ -117,6 +127,8 @@ func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolu
 
 // NodeUnpublishVolume removes the bind mount
 func (d *Driver) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublishVolumeRequest) (*csi.NodeUnpublishVolumeResponse, error) {
+	log.Info().Str("volume_id", req.VolumeId).Str("target_path", req.TargetPath).Msg("Request: NodeUnpublishVolume")
+
 	if req.VolumeId == "" {
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to NodeUnpublishVolume")
 	}
@@ -130,6 +142,7 @@ func (d *Driver) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublish
 	if err != nil {
 		return nil, err
 	}
+	log.Debug().Str("volume_id", req.VolumeId).Bool("mounted", mounted).Msg("Checking if currently mounting")
 
 	if mounted {
 		d.DiskHotPlugger.Unmount(req.TargetPath)
@@ -140,12 +153,14 @@ func (d *Driver) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublish
 
 // NodeGetInfo returns some identifier (ID, name) for the current node
 func (d *Driver) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
+	log.Info().Msg("Request: NodeGetInfo")
+
 	nodeInstanceID, region, err := currentNodeDetails()
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	log.Info().Str("node_id", nodeInstanceID).Str("region", region).Msg("Requested information about node")
+	log.Debug().Str("node_id", nodeInstanceID).Str("region", region).Msg("Requested information about node")
 
 	return &csi.NodeGetInfoResponse{
 		NodeId:            nodeInstanceID,

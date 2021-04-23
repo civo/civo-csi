@@ -9,17 +9,17 @@ import (
 
 // GetPluginInfo returns the name and volume of our driver
 func (d *Driver) GetPluginInfo(context.Context, *csi.GetPluginInfoRequest) (*csi.GetPluginInfoResponse, error) {
-	log.Debug().Msg("Plugin name/version requested")
+	log.Info().Msg("Request: GetPluginInfo")
 
 	return &csi.GetPluginInfoResponse{
-		Name:          "com.civo.csi",
+		Name:          "csi.civo.com",
 		VendorVersion: Version,
 	}, nil
 }
 
 // GetPluginCapabilities returns a list of the capabilities of this controller plugin
 func (d *Driver) GetPluginCapabilities(context.Context, *csi.GetPluginCapabilitiesRequest) (*csi.GetPluginCapabilitiesResponse, error) {
-	log.Debug().Msg("Plugin capabilities requested")
+	log.Info().Msg("Request: GetPluginCapabilities")
 
 	return &csi.GetPluginCapabilitiesResponse{
 		Capabilities: []*csi.PluginCapability{
@@ -36,6 +36,6 @@ func (d *Driver) GetPluginCapabilities(context.Context, *csi.GetPluginCapabiliti
 
 // Probe is a health check for the driver
 func (d *Driver) Probe(context.Context, *csi.ProbeRequest) (*csi.ProbeResponse, error) {
-	// Not sure how to implement this probe health check the right way - check the Civo API is responsive?
+	// TODO: Not sure how to implement this probe health check the right way - check the Civo API is responsive?
 	return &csi.ProbeResponse{}, nil
 }
