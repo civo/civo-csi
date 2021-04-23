@@ -59,7 +59,7 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 
 	log.Debug().Int64("size_gb", desiredSize).Msg("Volume size determined")
 
-	// Ignore if volume already exists
+	log.Debug().Msg("Listing current volumes in Civo API")
 	volumes, err := d.CivoClient.ListVolumes()
 	if err != nil {
 		log.Error().Err(err).Msg("Unable to list volumes in Civo API")
@@ -77,8 +77,9 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 			}, nil
 		}
 	}
+	log.Debug().Msg("Volume doesn't currently exist, will need creating")
 
-	// Check quota
+	log.Debug().Msg("Requesting available capacity in client's quota from the Civo API")
 	quota, err := d.CivoClient.GetQuota()
 	if err != nil {
 		log.Error().Err(err).Msg("Unable to get quota from Civo API")
@@ -86,12 +87,12 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 	}
 	availableSize := int64(quota.DiskGigabytesLimit - quota.DiskGigabytesUsage)
 	if (availableSize < desiredSize) || (quota.DiskVolumeCountUsage >= quota.DiskVolumeCountLimit) {
+		log.Error().Msg("Requested volume would exceed quota avilable")
 		return nil, status.Error(codes.OutOfRange, "Volume would exceed quota")
 	}
 
 	log.Debug().Int("disk_gb_limit", quota.DiskGigabytesLimit).Int("disk_gb_usage", quota.DiskGigabytesUsage).Msg("Quota has sufficient capacity remaining")
 
-	// Create volume in Civo API
 	v := &civogo.VolumeConfig{
 		Name:          req.Name,
 		Region:        d.Region,
