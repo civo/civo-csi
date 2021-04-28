@@ -40,6 +40,19 @@ The order for calls is usually:
 
 At this point the volume still exists and still contains data. If the operator wants to delete it, then the `kubectl pv delete ...` will actually call Controller's `DeleteVolume`. If a PV is requested, the Kubernetes control plane will ensure space is available with Controller's `GetCapacity`, and if the operator lists all volumes this is done with Controller's `ListVolumes`.
 
+## Requirements on K3s Clusters
+
+1. Must have a secret called `civo-api-access` within the `kube-system` namespace containing keys of `api-key`, `api-url`, `namespace` and `region`.
+2. Must have a folder created called `/var/lib/kubelet/plugins/csi.civo.com` (for writing a socket to that is shared between containers)
+3. Must have a file called `/etc/civostatsd` containing a TOML set of configuration (the same that's used for https://github.com/civo/civostatsd so it should already be available):
+
+```
+server="https://api.civo.com"
+token="12345678901234567890"
+region="NYC1"
+instance_id="12345678-1234-1234-1234-1234567890"
+```
+
 ## Known issues
 
 No currently known issues.
