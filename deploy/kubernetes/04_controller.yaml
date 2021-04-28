@@ -58,6 +58,11 @@ spec:
                 secretKeyRef:
                   name: civo-api-access
                   key: region
+            - name: CIVO_NAMESPACE
+              valueFrom:
+                secretKeyRef:
+                  name: civo-api-access
+                  key: namespace
             - name: CIVO_API_URL
               valueFrom:
                 secretKeyRef:

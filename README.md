@@ -44,7 +44,7 @@ At this point the volume still exists and still contains data. If the operator w
 
 1. Must have a secret called `civo-api-access` within the `kube-system` namespace containing keys of `api-key`, `api-url`, `namespace` and `region`.
 2. Must have a folder created called `/var/lib/kubelet/plugins/csi.civo.com` (for writing a socket to that is shared between containers)
-3. Must have a file called `/etc/civostatsd` containing a TOML set of configuration (the same that's used for https://github.com/civo/civostatsd so it should already be available):
+3. Must have a file called `/etc/civostatsd` containing a TOML set of configuration (the same that's used for https://github.com/civo/civostatsd so it should already be available), for example:
 
 ```
 server="https://api.civo.com"

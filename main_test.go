@@ -23,6 +23,7 @@ func TestCivoCSI(t *testing.T) {
 
 	os.Setenv("NODE_ID", "12345")
 	os.Setenv("REGION", "TESTING1")
+	os.Setenv("NAMESPACE", "default")
 
 	var eg errgroup.Group
 	eg.Go(func() error {

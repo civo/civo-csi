@@ -96,6 +96,7 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 	v := &civogo.VolumeConfig{
 		Name:          req.Name,
 		Region:        d.Region,
+		Namespace:     d.Namespace,
 		SizeGigabytes: int(desiredSize),
 	}
 	log.Debug().Msg("Creating volume in Civo API")
