@@ -23,6 +23,7 @@ spec:
           args:
             - "--csi-address=$(ADDRESS)"
             - "--default-fstype=ext4"
+            - "--timeout=30s"
             - "--v=5"
           env:
             - name: ADDRESS

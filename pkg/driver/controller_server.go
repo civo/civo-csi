@@ -2,6 +2,9 @@ package driver
 
 import (
 	"context"
+	"fmt"
+	"strings"
+	"time"
 
 	"github.com/civo/civogo"
 	"github.com/container-storage-interface/spec/lib/go/csi"
@@ -12,6 +15,8 @@ import (
 
 // BytesInGigabyte describes how many bytes are in a gigabyte
 const BytesInGigabyte int64 = 1024 * 1024 * 1024
+
+const CivoVolumeAvailableRetries int = 20
 
 var supportedAccessModes = []csi.VolumeCapability_AccessMode_Mode{
 	csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
@@ -69,12 +74,23 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 		if v.Name == req.Name {
 			log.Debug().Str("volume_id", v.ID).Msg("Volume already exists")
 
-			return &csi.CreateVolumeResponse{
-				Volume: &csi.Volume{
-					VolumeId:      v.ID,
-					CapacityBytes: int64(v.SizeGigabytes) * BytesInGigabyte,
-				},
-			}, nil
+			available, err := d.waitForVolumeStatus(&v, "available", CivoVolumeAvailableRetries)
+			if err != nil {
+				log.Error().Err(err).Msg("Unable to wait for volume availability in Civo API")
+				return nil, err
+			}
+
+			if available {
+				return &csi.CreateVolumeResponse{
+					Volume: &csi.Volume{
+						VolumeId:      v.ID,
+						CapacityBytes: int64(v.SizeGigabytes) * BytesInGigabyte,
+					},
+				}, nil
+			}
+
+			log.Error().Str("status", v.Status).Msg("Civo Volume is not 'available'")
+			return nil, status.Errorf(codes.Unavailable, "Volume isn't available to be attached, state is currently %s", v.Status)
 		}
 	}
 	log.Debug().Msg("Volume doesn't currently exist, will need creating")
@@ -100,20 +116,60 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 		SizeGigabytes: int(desiredSize),
 	}
 	log.Debug().Msg("Creating volume in Civo API")
-	volume, err := d.CivoClient.NewVolume(v)
+	result, err := d.CivoClient.NewVolume(v)
 	if err != nil {
 		log.Error().Err(err).Msg("Unable to create volume in Civo API")
 		return nil, err
 	}
 
-	log.Info().Str("volume_id", volume.ID).Msg("Volume created in Civo API")
+	log.Info().Str("volume_id", result.ID).Msg("Volume created in Civo API")
 
-	return &csi.CreateVolumeResponse{
-		Volume: &csi.Volume{
-			VolumeId:      volume.ID,
-			CapacityBytes: int64(v.SizeGigabytes) * BytesInGigabyte,
-		},
-	}, nil
+	volume, err := d.CivoClient.GetVolume(result.ID)
+	if err != nil {
+		log.Error().Err(err).Msg("Unable to get volume updates in Civo API")
+		return nil, err
+	}
+
+	log.Debug().Str("volume_id", result.ID).Msg("Waiting for volume to become available in Civo API")
+	available, err := d.waitForVolumeStatus(volume, "available", CivoVolumeAvailableRetries)
+	if err != nil {
+		log.Error().Err(err).Msg("Volume availability never completed successfully in Civo API")
+		return nil, err
+	}
+
+	if available {
+		return &csi.CreateVolumeResponse{
+			Volume: &csi.Volume{
+				VolumeId:      volume.ID,
+				CapacityBytes: int64(v.SizeGigabytes) * BytesInGigabyte,
+			},
+		}, nil
+	}
+
+	log.Error().Err(err).Msg("Civo Volume is not 'available'")
+	return nil, status.Errorf(codes.Unavailable, "Civo Volume is not 'available'")
+}
+
+// waitForVolumeAvailable will just sleep/loop waiting for Civo's API to report it's available, or hit a defined
+// number of retries
+func (d *Driver) waitForVolumeStatus(vol *civogo.Volume, desiredStatus string, retries int) (bool, error) {
+	var v *civogo.Volume
+	var err error
+
+	for i := 0; i < retries; i++ {
+		time.Sleep(time.Second)
+
+		v, err = d.CivoClient.GetVolume(vol.ID)
+		if err != nil {
+			log.Error().Err(err).Msg("Unable to get volume updates in Civo API")
+			return false, err
+		}
+
+		if v.Status == desiredStatus {
+			return true, nil
+		}
+	}
+	return false, fmt.Errorf("Volume isn't %s, state is currently %s", desiredStatus, v.Status)
 }
 
 // DeleteVolume is used once a volume is unused and therefore unmounted, to stop the resources being used and subsequent billing
@@ -127,9 +183,15 @@ func (d *Driver) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest)
 	log.Debug().Msg("Deleting volume in Civo API")
 	_, err := d.CivoClient.DeleteVolume(req.VolumeId)
 	if err != nil {
+		if strings.Contains(err.Error(), "DatabaseVolumeNotFoundError") {
+			log.Info().Str("volume_id", req.VolumeId).Msg("Volume already deleted from Civo API")
+			return &csi.DeleteVolumeResponse{}, nil
+		}
+
 		log.Error().Err(err).Msg("Unable to delete volume in Civo API")
 		return nil, err
 	}
+
 	log.Info().Str("volume_id", req.VolumeId).Msg("Volume deleted from Civo API")
 
 	return &csi.DeleteVolumeResponse{}, nil
@@ -148,12 +210,12 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 	}
 
 	log.Debug().Msg("Finding volume in Civo API")
-	volume, err := d.CivoClient.FindVolume(req.VolumeId)
+	volume, err := d.CivoClient.GetVolume(req.VolumeId)
 	if err != nil {
-		log.Error().Err(err).Msg("Unable to delete volume in Civo API")
+		log.Error().Err(err).Msg("Unable to find volume for publishing in Civo API")
 		return nil, err
 	}
-	log.Debug().Str("volume_id", volume.ID).Msg("Volume found in Civo API")
+	log.Debug().Str("volume_id", volume.ID).Msg("Volume found for publishing in Civo API")
 
 	// Call the CivoAPI to attach it to a node/instance
 	if volume.InstanceID != req.NodeId {
@@ -166,6 +228,14 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 	}
 	log.Info().Str("volume_id", volume.ID).Str("instance_id", req.NodeId).Msg("Volume successfully requested to be attached in Civo API")
 
+	log.Debug().Str("volume_id", volume.ID).Msg("Waiting for volume to become attached in Civo API")
+	_, err = d.waitForVolumeStatus(volume, "attached", CivoVolumeAvailableRetries)
+	if err != nil {
+		log.Error().Err(err).Msg("Volume attaching never completed successfully in Civo API")
+		return nil, err
+	}
+
+	log.Debug().Str("volume_id", volume.ID).Msg("Volume successfully attached in Civo API")
 	return &csi.ControllerPublishVolumeResponse{}, nil
 }
 
@@ -182,12 +252,19 @@ func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.Control
 	}
 
 	log.Debug().Msg("Finding volume in Civo API")
-	volume, err := d.CivoClient.FindVolume(req.VolumeId)
+	volume, err := d.CivoClient.GetVolume(req.VolumeId)
 	if err != nil {
-		log.Error().Err(err).Msg("Unable to delete volume in Civo API")
+		if strings.Contains(err.Error(), "DatabaseVolumeNotFoundError") {
+			log.Info().Str("volume_id", req.VolumeId).Msg("Volume already deleted from Civo API, pretend it's unmounted")
+			return &csi.ControllerUnpublishVolumeResponse{}, nil
+		} else {
+			log.Debug().Str("message", err.Error()).Msg("Error didn't match DatabaseVolumeNotFoundError")
+		}
+
+		log.Error().Err(err).Msg("Unable to find volume for unpublishing in Civo API")
 		return nil, err
 	}
-	log.Debug().Str("volume_id", volume.ID).Msg("Volume found in Civo API")
+	log.Debug().Str("volume_id", volume.ID).Msg("Volume found for unpublishing in Civo API")
 
 	// Call the CivoAPI to detach it, if it's attached to this node/instance
 	if volume.InstanceID == req.NodeId {
@@ -200,7 +277,18 @@ func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.Control
 	}
 	log.Info().Str("volume_id", volume.ID).Msg("Volume sucessfully requested to be detached in Civo API")
 
-	return &csi.ControllerUnpublishVolumeResponse{}, nil
+	available, err := d.waitForVolumeStatus(volume, "available", CivoVolumeAvailableRetries)
+	if err != nil {
+		log.Error().Err(err).Msg("Volume becoming available again never completed successfully in Civo API")
+		return nil, err
+	}
+
+	if available {
+		return &csi.ControllerUnpublishVolumeResponse{}, nil
+	}
+
+	log.Error().Err(err).Msg("Civo Volume did not go back to 'available'")
+	return nil, status.Errorf(codes.Unavailable, "Civo Volume did not go back to 'available'")
 }
 
 // ControllerExpandVolume is unsupported at the moment in Civo

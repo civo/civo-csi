@@ -55,7 +55,8 @@ instance_id="12345678-1234-1234-1234-1234567890"
 
 ## Known issues
 
-No currently known issues.
+* Killing the node daemonset leaves /dev/vda1 (yes the entire filesystem) mounted at /var/lib/kubelet/plugins/csi.civo.com
+* Volumes take a while to create but Controller's ControllerPublishVolume immediately returns success if the API succeeded, needs to retry unless it is actually mounted?
 
 ## Workflow
 

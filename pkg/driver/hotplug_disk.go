@@ -35,7 +35,7 @@ type RealDiskHotPlugger struct{}
 
 // Format erases the path with a new empty filesystem
 func (p *RealDiskHotPlugger) Format(path, filesystem string) error {
-	log.Debug().Str("path", path).Str("filesyste,", filesystem).Msg("Formatting")
+	log.Debug().Str("path", path).Str("filesystem", filesystem).Msg("Formatting")
 
 	output, err := exec.Command(("mkfs." + filesystem), path).CombinedOutput()
 	if err != nil {
@@ -161,15 +161,15 @@ func (p *RealDiskHotPlugger) IsMounted(path string) (bool, error) {
 		return false, err
 	}
 
-	args := []string{"-n", "-T", path}
-	cmd := exec.Command("findmnt", args...)
-	err = cmd.Run()
+	args := []string{"-M", path}
+	out, err := exec.Command("findmnt", args...).CombinedOutput()
 	if err != nil {
-		_, ok := err.(*exec.ExitError)
-		if !ok {
-			log.Error().Err(err).Msg("Unable to determine if device is mounted")
-			return false, fmt.Errorf("is device mounted err: %v cmd: findmnt %q", err, args)
+		if strings.TrimSpace(string(out)) == "" {
+			return false, nil
 		}
+
+		log.Error().Err(err).Msg("Unable to determine if device is mounted")
+		return false, fmt.Errorf("is device mounted err: %v cmd: findmnt %q", err, args)
 	}
 
 	log.Debug().Str("path", path).Msg("Path is mounted")

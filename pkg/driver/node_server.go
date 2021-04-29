@@ -2,7 +2,9 @@ package driver
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/BurntSushi/toml"
 	"github.com/container-storage-interface/spec/lib/go/csi"
@@ -73,14 +75,20 @@ func (d *Driver) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolu
 
 	log.Debug().Str("volume_id", req.VolumeId).Str("path", req.StagingTargetPath).Msg("Unmounting volume (unstaging)")
 
-	mounted, err := d.DiskHotPlugger.IsMounted(diskPathForVolume(req.VolumeId))
+	path := diskPathForVolume(req.VolumeId)
+
+	if path == "" {
+		return &csi.NodeUnstageVolumeResponse{}, nil
+	}
+
+	mounted, err := d.DiskHotPlugger.IsMounted(path)
 	if err != nil {
 		return nil, err
 	}
 	log.Debug().Str("volume_id", req.VolumeId).Bool("mounted", mounted).Msg("Checking if currently mounting")
 
 	if mounted {
-		d.DiskHotPlugger.Unmount(diskPathForVolume(req.VolumeId))
+		d.DiskHotPlugger.Unmount(path)
 	}
 
 	return &csi.NodeUnstageVolumeResponse{}, nil
@@ -230,6 +238,11 @@ func currentNodeDetailsFromEnv() (string, string, error) {
 	return os.Getenv("NODE_ID"), os.Getenv("REGION"), nil
 }
 
-func diskPathForVolume(ID string) string {
-	return "/dev/disk-by-id/" + ID
+func diskPathForVolume(id string) string {
+	matches, _ := filepath.Glob(fmt.Sprintf("/dev/disk/by-id/*%s", id))
+	if len(matches) >= 1 {
+		return matches[0]
+	}
+
+	return ""
 }
