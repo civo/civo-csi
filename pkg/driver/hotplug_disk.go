@@ -111,15 +111,19 @@ func (p *RealDiskHotPlugger) IsFormatted(path string) (bool, error) {
 		return false, errors.New("path is not empty")
 	}
 
-	if _, err := os.Stat("/usr/sbin/blkid"); os.IsNotExist(err) {
-		log.Error().Msg("Could not find 'blkid' in /usr/sbin")
-		return false, fmt.Errorf("blkid executable not found in /usr/sbin")
+	_, err := exec.LookPath("blkid")
+	if err != nil {
+		if err == exec.ErrNotFound {
+			log.Error().Msg("Could not find 'blkid' in $PATH")
+			return false, fmt.Errorf("blkid executable not found in $PATH")
+		}
+		return false, err
 	}
 
 	args := []string{path}
 
-	cmd := exec.Command("/usr/sbin/blkid", args...)
-	err := cmd.Run()
+	cmd := exec.Command("blkid", args...)
+	err = cmd.Run()
 	if err != nil {
 		exitError, ok := err.(*exec.ExitError)
 		if !ok {
@@ -148,14 +152,18 @@ func (p *RealDiskHotPlugger) IsMounted(path string) (bool, error) {
 		return false, errors.New("path is empty")
 	}
 
-	if _, err := os.Stat("/usr/bin/findmnt"); os.IsNotExist(err) {
-		log.Error().Msg("Could not find 'findmnt' in /usr/bin")
-		return false, fmt.Errorf("findmnt executable not found in /usr/bin")
+	_, err := exec.LookPath("findmnt")
+	if err != nil {
+		if err == exec.ErrNotFound {
+			log.Error().Msg("Could not find 'findmnt' in $PATH")
+			return false, fmt.Errorf("findmnt executable not found in $PATH")
+		}
+		return false, err
 	}
 
 	args := []string{"-n", "-T", path}
 	cmd := exec.Command("findmnt", args...)
-	err := cmd.Run()
+	err = cmd.Run()
 	if err != nil {
 		_, ok := err.(*exec.ExitError)
 		if !ok {
