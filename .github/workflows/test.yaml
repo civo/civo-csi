@@ -4,7 +4,7 @@ on:
   push:
 
 jobs:
-  csi-sanity:
+  test-suite:
     runs-on: ubuntu-18.04
 
     steps:
