@@ -1,14 +1,25 @@
-name: build
+name: driver
 
 on:
-  push:
-    tags:
-      - v*.*.*
+  - push
+  - pull_request
 
 jobs:
-  multi:
-    needs: test-suite
+  test-suite:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: "^1.15"
+      - name: Run tests
+        run: go test ./...
+      - name: Run vetting/linting checks
+        run: go vet ./...
+  build:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    needs: test-suite
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -31,3 +42,4 @@ jobs:
           push: true
           tags: |
             civo/csi:${{ steps.tag.outputs.tag }}
+            civo/csi:latest
