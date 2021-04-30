@@ -156,6 +156,10 @@ func (d *Driver) waitForVolumeStatus(vol *civogo.Volume, desiredStatus string, r
 	var v *civogo.Volume
 	var err error
 
+	if d.TestMode {
+		return true, nil
+	}
+
 	for i := 0; i < retries; i++ {
 		time.Sleep(time.Second)
 

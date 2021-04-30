@@ -74,10 +74,9 @@ func (d *Driver) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolu
 	}
 
 	log.Debug().Str("volume_id", req.VolumeId).Str("path", req.StagingTargetPath).Msg("Unmounting volume (unstaging)")
-
 	path := diskPathForVolume(req.VolumeId)
 
-	if path == "" {
+	if path == "" && !d.TestMode {
 		return &csi.NodeUnstageVolumeResponse{}, nil
 	}
 
