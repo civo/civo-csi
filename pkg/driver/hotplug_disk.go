@@ -97,6 +97,7 @@ func (p *RealDiskHotPlugger) Mount(path, mountpoint, filesystem string, flags ..
 func (p *RealDiskHotPlugger) Unmount(mountpoint string) error {
 	log.Debug().Str("mountpoint", mountpoint).Msg("Unmounting mountpoint")
 	output, err := exec.Command("umount", mountpoint).CombinedOutput()
+	log.Debug().Str("output", string(output)).Msg("Unmounting command output")
 	if err != nil {
 		return fmt.Errorf("Unmounting with 'umount %s' failed: %v output: %s", mountpoint, err, string(output))
 	}
@@ -165,6 +166,7 @@ func (p *RealDiskHotPlugger) IsMounted(path string) (bool, error) {
 	out, err := exec.Command("findmnt", args...).CombinedOutput()
 	if err != nil {
 		if strings.TrimSpace(string(out)) == "" {
+			log.Debug().Str("path", path).Msg("Path is not mounted")
 			return false, nil
 		}
 

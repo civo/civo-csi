@@ -82,11 +82,13 @@ func (d *Driver) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolu
 
 	mounted, err := d.DiskHotPlugger.IsMounted(path)
 	if err != nil {
+		log.Error().Err(err).Msg("Mounted check errored")
 		return nil, err
 	}
-	log.Debug().Str("volume_id", req.VolumeId).Bool("mounted", mounted).Msg("Checking if currently mounting")
+	log.Debug().Str("volume_id", req.VolumeId).Bool("mounted", mounted).Msg("Mounted check completed")
 
 	if mounted {
+		log.Debug().Str("volume_id", req.VolumeId).Bool("mounted", mounted).Msg("Unmounting")
 		d.DiskHotPlugger.Unmount(path)
 	}
 

@@ -281,6 +281,7 @@ func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.Control
 	}
 	log.Info().Str("volume_id", volume.ID).Msg("Volume sucessfully requested to be detached in Civo API")
 
+	log.Debug().Str("volume_id", volume.ID).Msg("Waiting for volume status to return to available")
 	available, err := d.waitForVolumeStatus(volume, "available", CivoVolumeAvailableRetries)
 	if err != nil {
 		log.Error().Err(err).Msg("Volume becoming available again never completed successfully in Civo API")
@@ -288,6 +289,7 @@ func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.Control
 	}
 
 	if available {
+		log.Debug().Str("volume_id", volume.ID).Msg("Volume is now available again")
 		return &csi.ControllerUnpublishVolumeResponse{}, nil
 	}
 
