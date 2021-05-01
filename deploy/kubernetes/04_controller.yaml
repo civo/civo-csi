@@ -64,6 +64,11 @@ spec:
                 secretKeyRef:
                   name: civo-api-access
                   key: namespace
+            - name: CIVO_CLUSTER_ID
+              valueFrom:
+                secretKeyRef:
+                  name: civo-api-access
+                  key: cluster-id
             - name: CIVO_API_URL
               valueFrom:
                 secretKeyRef:

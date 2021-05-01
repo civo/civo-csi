@@ -38,12 +38,13 @@ type Driver struct {
 	NodeInstanceID string
 	Region         string
 	Namespace      string
+	ClusterID      string
 	TestMode       bool
 	grpcServer     *grpc.Server
 }
 
 // NewDriver returns a CSI driver that implements gRPC endpoints for CSI
-func NewDriver(apiURL, apiKey, region, namespace string) (*Driver, error) {
+func NewDriver(apiURL, apiKey, region, namespace, cluster_id string) (*Driver, error) {
 	var client *civogo.Client
 	var err error
 
@@ -59,12 +60,13 @@ func NewDriver(apiURL, apiKey, region, namespace string) (*Driver, error) {
 		socketFilename = DefaultSocketFilename
 	}
 
-	log.Info().Str("api_url", apiURL).Str("region", region).Str("namespace", namespace).Str("socketFilename", socketFilename).Msg("Created a new driver")
+	log.Info().Str("api_url", apiURL).Str("region", region).Str("namespace", namespace).Str("cluster_id", cluster_id).Str("socketFilename", socketFilename).Msg("Created a new driver")
 
 	return &Driver{
 		CivoClient:     client,
 		Region:         region,
 		Namespace:      namespace,
+		ClusterID:      cluster_id,
 		DiskHotPlugger: &RealDiskHotPlugger{},
 		controller:     (apiKey != ""),
 		SocketFilename: socketFilename,
@@ -74,7 +76,7 @@ func NewDriver(apiURL, apiKey, region, namespace string) (*Driver, error) {
 
 // NewTestDriver returns a new Civo CSI driver specifically setup to call a fake Civo API
 func NewTestDriver() (*Driver, error) {
-	d, err := NewDriver("https://civo-api.example.com", "NO_API_KEY_NEEDED", "TEST1", "default")
+	d, err := NewDriver("https://civo-api.example.com", "NO_API_KEY_NEEDED", "TEST1", "default", "12345678")
 	d.SocketFilename = "unix:///tmp/civo-csi.sock"
 	d.CivoClient, _ = civogo.NewFakeClient()
 	d.DiskHotPlugger = &FakeDiskHotPlugger{}

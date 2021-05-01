@@ -113,6 +113,7 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 		Name:          req.Name,
 		Region:        d.Region,
 		Namespace:     d.Namespace,
+		ClusterID:     d.ClusterID,
 		SizeGigabytes: int(desiredSize),
 	}
 	log.Debug().Msg("Creating volume in Civo API")
