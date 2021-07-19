@@ -2,7 +2,7 @@ module github.com/civo/civo-csi
 
 require (
 	github.com/BurntSushi/toml v0.3.1
-	github.com/civo/civogo v0.2.42
+	github.com/civo/civogo v0.2.48
 	github.com/container-storage-interface/spec v1.3.0
 	github.com/google/uuid v1.2.0 // indirect
 	github.com/kubernetes-csi/csi-test/v4 v4.0.2

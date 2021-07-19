@@ -82,7 +82,7 @@ This will run the full Kubernetes Storage SIG's suite of tests against the endpo
 
 The steps are:
 
-1. Create an environment variable called `IMAGE_NAME` with a random or recognisable name (`IMAGE_NAME=$(uuidgen | tr '[:upper:]' '[:lower:]')` works well)
+1. Create an environment variable called `IMAGE_NAME` with a random or recognisable name (`export IMAGE_NAME=$(uuidgen | tr '[:upper:]' '[:lower:]')` works well)
 2. Build the Docker image with `docker build -t ttl.sh/${IMAGE_NAME}:2h .`
 3. Push the Docker image to ttl.sh (a short lived Docker image repository, useful for dev): `docker push ttl.sh/${IMAGE_NAME}:2h`
 4. Copy recursively the `deploy/kubernetes` folder to `deploy/kubernetes-dev` with `cp -rv deploy/kubernetes deploy/kubernetes-dev` and replace all occurences of `civo-csi:latest` in there with `YOUR_IMAGE_NAME:2h` (ENV variable interpolation won't work here), this folder is automatically in `.gitignore`

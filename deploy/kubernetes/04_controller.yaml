@@ -16,6 +16,17 @@ spec:
         role: civo-csi
     spec:
       priorityClassName: system-cluster-critical
+      tolerations:
+      - key: node.kubernetes.io/disk-pressure
+        operator: Exists
+      - effect: NoExecute
+        key: node.kubernetes.io/not-ready
+        operator: Exists
+        tolerationSeconds: 30
+      - effect: NoExecute
+        key: node.kubernetes.io/unreachable
+        operator: Exists
+        tolerationSeconds: 30
       serviceAccount: civo-csi-controller-sa
       containers:
         - name: csi-provisioner
@@ -36,6 +47,7 @@ spec:
           image: k8s.gcr.io/sig-storage/csi-attacher:v3.1.0
           args:
             - "--csi-address=$(ADDRESS)"
+            - "--timeout=30s"
             - "--v=5"
           env:
             - name: ADDRESS

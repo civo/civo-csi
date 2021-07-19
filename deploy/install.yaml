@@ -148,6 +148,17 @@ spec:
         role: civo-csi
     spec:
       priorityClassName: system-cluster-critical
+      tolerations:
+      - key: node.kubernetes.io/disk-pressure
+        operator: Exists
+      - effect: NoExecute
+        key: node.kubernetes.io/not-ready
+        operator: Exists
+        tolerationSeconds: 30
+      - effect: NoExecute
+        key: node.kubernetes.io/unreachable
+        operator: Exists
+        tolerationSeconds: 30
       serviceAccount: civo-csi-controller-sa
       containers:
         - name: csi-provisioner
@@ -232,11 +243,27 @@ spec:
       priorityClassName: system-node-critical
       serviceAccount: civo-csi-node-sa
       hostNetwork: true
+      tolerations:
+      - key: node.kubernetes.io/disk-pressure
+        operator: Exists
+      - key: node.kubernetes.io/memory-pressure
+        operator: Exists
+      - key: node.kubernetes.io/network-unavailable
+        operator: Exists
+      - key: node.kubernetes.io/not-ready
+        operator: Exists
+      - key: node.kubernetes.io/pid-pressure
+        operator: Exists
+      - key: node.kubernetes.io/unreachable
+        operator: Exists
+      - key: node.kubernetes.io/unschedulable
+        operator: Exists
       containers:
         - name: csi-node-driver-registrar
           image: k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.1.0
           args:
             - "--v=5"
+            - "--timeout=30s"
             - "--csi-address=$(ADDRESS)"
             - "--kubelet-registration-path=$(DRIVER_REG_SOCK_PATH)"
           env:

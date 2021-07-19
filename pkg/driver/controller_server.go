@@ -162,7 +162,7 @@ func (d *Driver) waitForVolumeStatus(vol *civogo.Volume, desiredStatus string, r
 	}
 
 	for i := 0; i < retries; i++ {
-		time.Sleep(time.Second)
+		time.Sleep(5 * time.Second)
 
 		v, err = d.CivoClient.GetVolume(vol.ID)
 		if err != nil {
