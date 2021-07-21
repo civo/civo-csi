@@ -119,9 +119,9 @@ metadata:
   name: csi.civo.com
 spec:
   podInfoOnMount: true
-kind: StorageClass
 ---
 apiVersion: storage.k8s.io/v1
+kind: StorageClass
 metadata:
   name: civo-volume
   annotations:
@@ -129,6 +129,7 @@ metadata:
 provisioner: csi.civo.com
 allowVolumeExpansion: false
 reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
 ---
 apiVersion: apps/v1
 kind: StatefulSet
