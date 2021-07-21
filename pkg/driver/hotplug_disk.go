@@ -42,6 +42,14 @@ func (p *RealDiskHotPlugger) Format(path, filesystem string) error {
 		return fmt.Errorf("Formatting with 'mkfs.%s %s' failed: %v output: %s", filesystem, path, err, string(output))
 	}
 
+	formatted, err := p.IsFormatted(path)
+	if err != nil {
+		return err
+	}
+	if !formatted {
+		return fmt.Errorf("Failed to ensure it was formatted, output of 'mkfs.%s %s' is %s", filesystem, path, string(output))
+	}
+
 	return nil
 }
 
@@ -88,6 +96,15 @@ func (p *RealDiskHotPlugger) Mount(path, mountpoint, filesystem string, flags ..
 	if err != nil {
 		return fmt.Errorf("Mounting with 'mount %s' failed: %v output: %s", strings.Join(args, " "), err, string(output))
 	}
+
+	mounted, err := p.IsMounted(mountpoint)
+	if err != nil {
+		return err
+	}
+	if !mounted {
+		return fmt.Errorf("After apparently successful mounting, still not mounted - mount %s output: %s", strings.Join(args, " "), string(output))
+	}
+
 	log.Debug().Str("path", path).Str("filesystem", filesystem).Str("mountpoint", mountpoint).Msg("Mounting succeeded")
 
 	return nil
