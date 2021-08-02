@@ -18,7 +18,7 @@ func TestNodeStageVolume(t *testing.T) {
 			VolumeId:          "volume-1",
 			StagingTargetPath: "/mnt/my-target",
 			VolumeCapability: &csi.VolumeCapability{
-				AccessType: &csi.VolumeCapability_Block{},
+				AccessType: &csi.VolumeCapability_Mount{},
 				AccessMode: &csi.VolumeCapability_AccessMode{
 					Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
 				},
@@ -44,7 +44,7 @@ func TestNodeStageVolume(t *testing.T) {
 			VolumeId:          "volume-1",
 			StagingTargetPath: "/mnt/my-target",
 			VolumeCapability: &csi.VolumeCapability{
-				AccessType: &csi.VolumeCapability_Block{},
+				AccessType: &csi.VolumeCapability_Mount{},
 				AccessMode: &csi.VolumeCapability_AccessMode{
 					Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
 				},
@@ -88,7 +88,7 @@ func TestNodePublishVolume(t *testing.T) {
 			StagingTargetPath: "/mnt/my-target",
 			TargetPath:        "/var/lib/kubelet/some-path",
 			VolumeCapability: &csi.VolumeCapability{
-				AccessType: &csi.VolumeCapability_Block{},
+				AccessType: &csi.VolumeCapability_Mount{},
 				AccessMode: &csi.VolumeCapability_AccessMode{
 					Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
 				},

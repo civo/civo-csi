@@ -49,6 +49,10 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 		if !modeSupported {
 			return nil, status.Error(codes.InvalidArgument, "CreateVolume access mode isn't supported")
 		}
+
+		if _, ok := cap.GetAccessType().(*csi.VolumeCapability_Block); ok {
+			return nil, status.Error(codes.InvalidArgument, "CreateVolume block types aren't supported, only mount types")
+		}
 	}
 
 	// Determine required size

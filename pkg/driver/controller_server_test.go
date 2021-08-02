@@ -18,6 +18,7 @@ func TestCreateVolume(t *testing.T) {
 			Name: "foo",
 			VolumeCapabilities: []*csi.VolumeCapability{
 				{
+					AccessType: &csi.VolumeCapability_Mount{},
 					AccessMode: &csi.VolumeCapability_AccessMode{
 						Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
 					},
@@ -30,6 +31,23 @@ func TestCreateVolume(t *testing.T) {
 		assert.Equal(t, "foo", volumes[0].Name)
 		assert.Equal(t, 10, volumes[0].SizeGigabytes)
 		assert.Equal(t, volumes[0].ID, resp.Volume.VolumeId)
+	})
+
+	t.Run("Disallow block volumes", func(t *testing.T) {
+		d, _ := driver.NewTestDriver()
+
+		_, err := d.CreateVolume(context.Background(), &csi.CreateVolumeRequest{
+			Name: "foo",
+			VolumeCapabilities: []*csi.VolumeCapability{
+				{
+					AccessType: &csi.VolumeCapability_Block{},
+					AccessMode: &csi.VolumeCapability_AccessMode{
+						Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
+					},
+				},
+			},
+		})
+		assert.NotNil(t, err)
 	})
 
 	t.Run("Create a specified size volume", func(t *testing.T) {
