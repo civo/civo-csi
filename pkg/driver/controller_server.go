@@ -106,9 +106,12 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 		return nil, err
 	}
 	availableSize := int64(quota.DiskGigabytesLimit - quota.DiskGigabytesUsage)
-	if (availableSize < desiredSize) || (quota.DiskVolumeCountUsage >= quota.DiskVolumeCountLimit) {
-		log.Error().Msg("Requested volume would exceed quota avilable")
-		return nil, status.Error(codes.OutOfRange, "Volume would exceed quota")
+	if availableSize < desiredSize {
+		log.Error().Msg("Requested volume would exceed storage quota available")
+		return nil, status.Error(codes.OutOfRange, fmt.Sprintf("Volume would exceed quota by %d", availableSize-desiredSize))
+	} else if quota.DiskVolumeCountUsage >= quota.DiskVolumeCountLimit {
+		log.Error().Msg("Requested volume would exceed volume quota available")
+		return nil, status.Error(codes.OutOfRange, fmt.Sprintf("Volume would exceed volume count limit quota of %d", quota.DiskVolumeCountLimit))
 	}
 
 	log.Debug().Int("disk_gb_limit", quota.DiskGigabytesLimit).Int("disk_gb_usage", quota.DiskGigabytesUsage).Msg("Quota has sufficient capacity remaining")
