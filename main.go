@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/civo/civo-csi/pkg/driver"
@@ -16,7 +17,13 @@ func main() {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 
-	d, err := driver.NewDriver(os.Getenv("CIVO_API_URL"), os.Getenv("CIVO_API_KEY"), os.Getenv("CIVO_REGION"), os.Getenv("CIVO_NAMESPACE"), os.Getenv("CIVO_CLUSTER_ID"))
+	apiURL := strings.TrimSuffix(strings.TrimSpace(os.Getenv("CIVO_API_URL")), "\n")
+	apiKey := strings.TrimSuffix(strings.TrimSpace(os.Getenv("CIVO_API_KEY")), "\n")
+	region := strings.TrimSuffix(strings.TrimSpace(os.Getenv("CIVO_REGION")), "\n")
+	ns := strings.TrimSuffix(strings.TrimSpace(os.Getenv("CIVO_NAMESPACE")), "\n")
+	clusterID := strings.TrimSuffix(strings.TrimSpace(os.Getenv("CIVO_CLUSTER_ID")), "\n")
+
+	d, err := driver.NewDriver(apiURL, apiKey, region, ns, clusterID)
 	if err != nil {
 		log.Fatal().Err(err)
 	}
