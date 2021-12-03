@@ -139,7 +139,7 @@ func TestControllerPublishVolume(t *testing.T) {
 }
 
 func TestControllerUnpublishVolume(t *testing.T) {
-	t.Run("Unpublish a volume if attached to the correct node", func(t *testing.T) {
+	t.Run("Unpublish a volume if requested", func(t *testing.T) {
 		d, _ := driver.NewTestDriver()
 
 		volume, err := d.CivoClient.NewVolume(&civogo.VolumeConfig{
@@ -147,7 +147,7 @@ func TestControllerUnpublishVolume(t *testing.T) {
 		})
 		assert.Nil(t, err)
 
-		_, err = d.CivoClient.AttachVolume(volume.ID, "instance-1")
+		_, err = d.CivoClient.AttachVolume(volume.ID, "instance-2")
 		assert.Nil(t, err)
 
 		_, err = d.ControllerUnpublishVolume(context.Background(), &csi.ControllerUnpublishVolumeRequest{
@@ -158,27 +158,6 @@ func TestControllerUnpublishVolume(t *testing.T) {
 
 		volumes, _ := d.CivoClient.ListVolumes()
 		assert.Equal(t, "", volumes[0].InstanceID)
-	})
-
-	t.Run("Doesn't unpublish a volume if attached to a different node", func(t *testing.T) {
-		d, _ := driver.NewTestDriver()
-
-		volume, err := d.CivoClient.NewVolume(&civogo.VolumeConfig{
-			Name: "foo",
-		})
-		assert.Nil(t, err)
-
-		_, err = d.CivoClient.AttachVolume(volume.ID, "other-instance")
-		assert.Nil(t, err)
-
-		_, err = d.ControllerUnpublishVolume(context.Background(), &csi.ControllerUnpublishVolumeRequest{
-			VolumeId: volume.ID,
-			NodeId:   "this-instance",
-		})
-		assert.Nil(t, err)
-
-		volumes, _ := d.CivoClient.ListVolumes()
-		assert.Equal(t, "other-instance", volumes[0].InstanceID)
 	})
 }
 
