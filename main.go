@@ -17,11 +17,11 @@ func main() {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 
-	apiURL := strings.TrimSuffix(strings.TrimSpace(os.Getenv("CIVO_API_URL")), "\n")
-	apiKey := strings.TrimSuffix(strings.TrimSpace(os.Getenv("CIVO_API_KEY")), "\n")
-	region := strings.TrimSuffix(strings.TrimSpace(os.Getenv("CIVO_REGION")), "\n")
-	ns := strings.TrimSuffix(strings.TrimSpace(os.Getenv("CIVO_NAMESPACE")), "\n")
-	clusterID := strings.TrimSuffix(strings.TrimSpace(os.Getenv("CIVO_CLUSTER_ID")), "\n")
+	apiURL := strings.TrimSpace(os.Getenv("CIVO_API_URL"))
+	apiKey := strings.TrimSpace(os.Getenv("CIVO_API_KEY"))
+	region := strings.TrimSpace(os.Getenv("CIVO_REGION"))
+	ns := strings.TrimSpace(os.Getenv("CIVO_NAMESPACE"))
+	clusterID := strings.TrimSpace(os.Getenv("CIVO_CLUSTER_ID"))
 
 	d, err := driver.NewDriver(apiURL, apiKey, region, ns, clusterID)
 	if err != nil {
