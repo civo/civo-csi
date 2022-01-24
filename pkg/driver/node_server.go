@@ -2,9 +2,7 @@ package driver
 
 import (
 	"context"
-	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/BurntSushi/toml"
 	"github.com/container-storage-interface/spec/lib/go/csi"
@@ -32,19 +30,27 @@ func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRe
 
 	log.Debug().Str("volume_id", req.VolumeId).Msg("Formatting and mounting volume (staging)")
 
+	// Find the disk attachment location
+	attachedDiskPath := d.DiskHotPlugger.PathForVolume(req.VolumeId)
+	if attachedDiskPath == "" {
+		err := status.Error(codes.NotFound, "path to volume (/dev/disk/by-id/VOLUME_ID) not found")
+		log.Error().Str("volume_id", req.VolumeId).Err(err)
+		return nil, err
+	}
+
 	// Format the volume if not already formatted
-	formatted, err := d.DiskHotPlugger.IsFormatted(diskPathForVolume(req.VolumeId))
+	formatted, err := d.DiskHotPlugger.IsFormatted(attachedDiskPath)
 	if err != nil {
 		return nil, err
 	}
 	log.Debug().Str("volume_id", req.VolumeId).Bool("formatted", formatted).Msg("Is currently formatted?")
 
 	if !formatted {
-		d.DiskHotPlugger.Format(diskPathForVolume(req.VolumeId), "ext4")
+		d.DiskHotPlugger.Format(d.DiskHotPlugger.PathForVolume(req.VolumeId), "ext4")
 	}
 
 	// Mount the volume if not already mounted
-	mounted, err := d.DiskHotPlugger.IsMounted(diskPathForVolume(req.VolumeId))
+	mounted, err := d.DiskHotPlugger.IsMounted(d.DiskHotPlugger.PathForVolume(req.VolumeId))
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +62,7 @@ func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRe
 		if mount != nil {
 			options = mount.MountFlags
 		}
-		d.DiskHotPlugger.Mount(diskPathForVolume(req.VolumeId), req.StagingTargetPath, "ext4", options...)
+		d.DiskHotPlugger.Mount(d.DiskHotPlugger.PathForVolume(req.VolumeId), req.StagingTargetPath, "ext4", options...)
 	}
 
 	return &csi.NodeStageVolumeResponse{}, nil
@@ -74,7 +80,7 @@ func (d *Driver) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolu
 	}
 
 	log.Debug().Str("volume_id", req.VolumeId).Str("path", req.StagingTargetPath).Msg("Unmounting volume (unstaging)")
-	path := diskPathForVolume(req.VolumeId)
+	path := d.DiskHotPlugger.PathForVolume(req.VolumeId)
 
 	if path == "" && !d.TestMode {
 		return &csi.NodeUnstageVolumeResponse{}, nil
@@ -82,7 +88,7 @@ func (d *Driver) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolu
 
 	mounted, err := d.DiskHotPlugger.IsMounted(path)
 	if err != nil {
-		log.Error().Err(err).Msg("Mounted check errored")
+		log.Error().Str("path", path).Err(err).Msg("Mounted check errored")
 		return nil, err
 	}
 	log.Debug().Str("volume_id", req.VolumeId).Bool("mounted", mounted).Msg("Mounted check completed")
@@ -237,13 +243,4 @@ func currentNodeDetails() (string, string, error) {
 
 func currentNodeDetailsFromEnv() (string, string, error) {
 	return os.Getenv("NODE_ID"), os.Getenv("REGION"), nil
-}
-
-func diskPathForVolume(id string) string {
-	matches, _ := filepath.Glob(fmt.Sprintf("/dev/disk/by-id/*%s", id))
-	if len(matches) >= 1 {
-		return matches[0]
-	}
-
-	return ""
 }

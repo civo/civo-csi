@@ -8,6 +8,8 @@ import (
 	"github.com/civo/civo-csi/pkg/driver"
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestNodeStageVolume(t *testing.T) {
@@ -54,6 +56,27 @@ func TestNodeStageVolume(t *testing.T) {
 
 		formatCalled := hotPlugger.FormatCalled
 		assert.False(t, formatCalled)
+	})
+
+	t.Run("Returns Not Found gRPC error if the disk isn't plugged in", func(t *testing.T) {
+		d, _ := driver.NewTestDriver()
+		hotPlugger := &driver.FakeDiskHotPlugger{
+			DiskAttachmentMissing: true,
+		}
+		d.DiskHotPlugger = hotPlugger
+
+		_, err := d.NodeStageVolume(context.Background(), &csi.NodeStageVolumeRequest{
+			VolumeId:          "volume-1",
+			StagingTargetPath: "/mnt/my-target",
+			VolumeCapability: &csi.VolumeCapability{
+				AccessType: &csi.VolumeCapability_Mount{},
+				AccessMode: &csi.VolumeCapability_AccessMode{
+					Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
+				},
+			},
+		})
+
+		assert.Equal(t, status.Code(err), codes.NotFound)
 	})
 }
 
