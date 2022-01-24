@@ -15,6 +15,9 @@ import (
 const BlikidNotFound int = 2
 
 type DiskHotPlugger interface {
+	// PathForVolume returns the path of the hotplugged disk
+	PathForVolume(volumeID string) string
+
 	// Format erases the path with a new empty filesystem
 	Format(path, filesystem string) error
 
@@ -32,6 +35,16 @@ type DiskHotPlugger interface {
 }
 
 type RealDiskHotPlugger struct{}
+
+// PathForVolume returns the path of the hotplugged disk
+func (p *RealDiskHotPlugger) PathForVolume(volumeID string) string {
+	matches, _ := filepath.Glob(fmt.Sprintf("/dev/disk/by-id/*%s", volumeID))
+	if len(matches) >= 1 {
+		return matches[0]
+	}
+
+	return ""
+}
 
 // Format erases the path with a new empty filesystem
 func (p *RealDiskHotPlugger) Format(path, filesystem string) error {
@@ -126,7 +139,7 @@ func (p *RealDiskHotPlugger) Unmount(mountpoint string) error {
 func (p *RealDiskHotPlugger) IsFormatted(path string) (bool, error) {
 	log.Debug().Str("path", path).Msg("Checking if path is formatted")
 	if path == "" {
-		return false, errors.New("path is not empty")
+		return false, errors.New("path to check is empty")
 	}
 
 	_, err := exec.LookPath("blkid")
@@ -197,13 +210,23 @@ func (p *RealDiskHotPlugger) IsMounted(path string) (bool, error) {
 }
 
 type FakeDiskHotPlugger struct {
-	Filesystem   string
-	Formatted    bool
-	FormatCalled bool
-	Device       string
-	Mountpoint   string
-	Mounted      bool
-	MountCalled  bool
+	DiskAttachmentMissing bool
+	Filesystem            string
+	Formatted             bool
+	FormatCalled          bool
+	Device                string
+	Mountpoint            string
+	Mounted               bool
+	MountCalled           bool
+}
+
+// PathForVolume returns the path of the hotplugged disk
+func (p *FakeDiskHotPlugger) PathForVolume(volumeID string) string {
+	if p.DiskAttachmentMissing == true {
+		return ""
+	}
+
+	return "/fake-dev/disk/by-id/" + volumeID
 }
 
 // Format erases the path with a new empty filesystem
