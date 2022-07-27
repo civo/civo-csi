@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"time"
 
 	"github.com/civo/civogo"
 	"github.com/container-storage-interface/spec/lib/go/csi"
@@ -15,6 +16,8 @@ import (
 	"github.com/rs/zerolog/log"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 )
 
 // Name is the name of the driver
@@ -33,6 +36,7 @@ const DefaultSocketFilename string = "unix:///var/lib/kubelet/plugins/civo-csi/c
 type Driver struct {
 	CivoClient     civogo.Clienter
 	DiskHotPlugger DiskHotPlugger
+	KubeClient     kubernetes.Interface
 	controller     bool
 	SocketFilename string
 	NodeInstanceID string
@@ -60,6 +64,16 @@ func NewDriver(apiURL, apiKey, region, namespace, cluster_id string) (*Driver, e
 		socketFilename = DefaultSocketFilename
 	}
 
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		panic(err.Error())
+	}
+
 	log.Info().Str("api_url", apiURL).Str("region", region).Str("namespace", namespace).Str("cluster_id", cluster_id).Str("socketFilename", socketFilename).Msg("Created a new driver")
 
 	return &Driver{
@@ -70,6 +84,7 @@ func NewDriver(apiURL, apiKey, region, namespace, cluster_id string) (*Driver, e
 		DiskHotPlugger: &RealDiskHotPlugger{},
 		controller:     (apiKey != ""),
 		SocketFilename: socketFilename,
+		KubeClient:     clientset,
 		grpcServer:     &grpc.Server{},
 	}, nil
 }
@@ -147,6 +162,25 @@ func (d *Driver) Run(ctx context.Context) error {
 		}()
 		log.Debug().Msg("Awaiting gRPC requests")
 		return d.grpcServer.Serve(grpcListener)
+	})
+
+	eg.Go(func() error {
+		log.Debug().Msg("Starting the go routine to fix hanging volumes")
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(99999)*time.Hour)
+		defer cancel()
+
+		ticker := time.NewTicker(time.Duration(30) * time.Minute)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				log.Debug().Msg("Checking for hanging volumes")
+				err = d.fixHangingVolume()
+			case <-ctx.Done():
+				return nil
+			}
+		}
 	})
 
 	log.Debug().Str("grpc_address", grpcAddress).Msg("Running gRPC server, waiting for a signal to quit the process...")
