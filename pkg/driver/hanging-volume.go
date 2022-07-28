@@ -7,7 +7,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func (d Driver) fixHangingVolume() error {
+// FixHangingVolume cleans up civovolumes which do not have a corresponding PV
+func (d Driver) FixHangingVolume() error {
 	log.Info().Msg("Fixing hanging volumes")
 	volumes, err := d.CivoClient.ListVolumes()
 	if err != nil {

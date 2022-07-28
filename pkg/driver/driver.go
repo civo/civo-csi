@@ -17,6 +17,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
 )
 
@@ -64,14 +65,18 @@ func NewDriver(apiURL, apiKey, region, namespace, cluster_id string) (*Driver, e
 		socketFilename = DefaultSocketFilename
 	}
 
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		panic(err.Error())
-	}
+	var clientset *kubernetes.Clientset
 
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		panic(err.Error())
+	if os.Getenv("REGION") != "TESTING" {
+		config, err := rest.InClusterConfig()
+		if err != nil {
+			panic(err.Error())
+		}
+
+		clientset, err = kubernetes.NewForConfig(config)
+		if err != nil {
+			panic(err.Error())
+		}
 	}
 
 	log.Info().Str("api_url", apiURL).Str("region", region).Str("namespace", namespace).Str("cluster_id", cluster_id).Str("socketFilename", socketFilename).Msg("Created a new driver")
@@ -96,7 +101,7 @@ func NewTestDriver() (*Driver, error) {
 	d.CivoClient, _ = civogo.NewFakeClient()
 	d.DiskHotPlugger = &FakeDiskHotPlugger{}
 	d.TestMode = true // Just stops so much logging out of failures, as they are often expected during the tests
-
+	d.KubeClient = fake.NewSimpleClientset()
 	zerolog.SetGlobalLevel(zerolog.PanicLevel)
 
 	return d, err
@@ -176,7 +181,7 @@ func (d *Driver) Run(ctx context.Context) error {
 			select {
 			case <-ticker.C:
 				log.Debug().Msg("Checking for hanging volumes")
-				err = d.fixHangingVolume()
+				err = d.FixHangingVolume()
 			case <-ctx.Done():
 				return nil
 			}
