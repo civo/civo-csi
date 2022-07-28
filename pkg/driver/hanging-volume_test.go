@@ -11,7 +11,6 @@ import (
 func TestFixHangingVolume(t *testing.T) {
 	t.Run("Find out the instance ID", func(t *testing.T) {
 		os.Setenv("NODE_ID", "instance-1")
-		os.Setenv("REGION", "TESTING")
 
 		d, _ := driver.NewTestDriver()
 

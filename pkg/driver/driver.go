@@ -96,6 +96,7 @@ func NewDriver(apiURL, apiKey, region, namespace, cluster_id string) (*Driver, e
 
 // NewTestDriver returns a new Civo CSI driver specifically setup to call a fake Civo API
 func NewTestDriver() (*Driver, error) {
+	os.Setenv("REGION", "TESTING")
 	d, err := NewDriver("https://civo-api.example.com", "NO_API_KEY_NEEDED", "TEST1", "default", "12345678")
 	d.SocketFilename = "unix:///tmp/civo-csi.sock"
 	d.CivoClient, _ = civogo.NewFakeClient()
