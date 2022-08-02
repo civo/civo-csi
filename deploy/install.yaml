@@ -1,3 +1,4 @@
+---
 kind: ServiceAccount
 apiVersion: v1
 metadata:
@@ -120,8 +121,8 @@ metadata:
 spec:
   podInfoOnMount: true
 ---
-apiVersion: storage.k8s.io/v1
 kind: StorageClass
+apiVersion: storage.k8s.io/v1
 metadata:
   name: civo-volume
   annotations:
@@ -131,8 +132,8 @@ allowVolumeExpansion: false
 reclaimPolicy: Delete
 volumeBindingMode: WaitForFirstConsumer
 ---
-apiVersion: apps/v1
 kind: StatefulSet
+apiVersion: apps/v1
 metadata:
   name: civo-csi-controller
   namespace: kube-system
@@ -180,6 +181,7 @@ spec:
           image: k8s.gcr.io/sig-storage/csi-attacher:v3.1.0
           args:
             - "--csi-address=$(ADDRESS)"
+            - "--timeout=30s"
             - "--v=5"
           env:
             - name: ADDRESS
@@ -226,8 +228,8 @@ spec:
         - name: socket-dir
           emptyDir: {}
 ---
-apiVersion: apps/v1
 kind: DaemonSet
+apiVersion: apps/v1
 metadata:
   name: civo-csi-node
   namespace: kube-system
@@ -261,7 +263,7 @@ spec:
         operator: Exists
       containers:
         - name: csi-node-driver-registrar
-          image: k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.1.0
+          image: k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.5.1
           args:
             - "--v=5"
             - "--timeout=30s"
@@ -269,7 +271,7 @@ spec:
             - "--kubelet-registration-path=$(DRIVER_REG_SOCK_PATH)"
           env:
             - name: ADDRESS
-              value: unix:///var/lib/kubelet/plugins/csi.civo.com/csi.sock
+              value: /csi/csi.sock
             - name: DRIVER_REG_SOCK_PATH
               value: /var/lib/kubelet/plugins/csi.civo.com/csi.sock
             - name: KUBE_NODE_NAME
@@ -277,8 +279,6 @@ spec:
                 fieldRef:
                   fieldPath: spec.nodeName
           volumeMounts:
-            - name: socket-dir
-              mountPath: /var/lib/kubelet/plugins/csi.civo.com
             - name: plugin-dir
               mountPath: /csi/
             - name: registration-dir
@@ -287,7 +287,7 @@ spec:
           image: civo/csi:latest
           env:
             - name: CSI_ENDPOINT
-              value: unix:///var/lib/kubelet/plugins/csi.civo.com/csi.sock
+              value: unix:///csi/csi.sock
           imagePullPolicy: "Always"
           securityContext:
             privileged: true
@@ -295,8 +295,6 @@ spec:
               add: ["SYS_ADMIN"]
             allowPrivilegeEscalation: true
           volumeMounts:
-            - name: socket-dir
-              mountPath: /var/lib/kubelet/plugins/csi.civo.com
             - name: plugin-dir
               mountPath: /csi
             - name: etc-dir
@@ -308,8 +306,6 @@ spec:
             - name: device-dir
               mountPath: /dev
       volumes:
-        - name: socket-dir
-          emptyDir: {}
         - name: registration-dir
           hostPath:
             path: /var/lib/kubelet/plugins_registry/

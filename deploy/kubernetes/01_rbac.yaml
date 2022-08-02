@@ -1,7 +1,4 @@
-############################
-# RBAC for Controller plugin
-############################
-
+---
 kind: ServiceAccount
 apiVersion: v1
 metadata:
@@ -88,12 +85,6 @@ roleRef:
   name: civo-csi-attacher-role
   apiGroup: rbac.authorization.k8s.io
 ---
-
-
-######################
-# RBAC for Node plugin
-######################
-
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -122,4 +113,3 @@ roleRef:
   kind: ClusterRole
   name: civo-csi-node-driver-registrar-role
   apiGroup: rbac.authorization.k8s.io
----
