@@ -262,13 +262,20 @@ spec:
       - key: node.kubernetes.io/unschedulable
         operator: Exists
       containers:
-        - name: csi-node-driver-registrar
-          image: k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.5.1
+        - name: csi-driver-registrar
+          image: k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.5.0
           args:
             - "--v=5"
+            - "--csi-address=/csi/csi.sock"
+            - "--kubelet-registration-path=/var/lib/kubelet/plugins/csi.civo.com/csi.sock"
+            - "--health-port=9809"
             - "--timeout=30s"
-            - "--csi-address=$(ADDRESS)"
-            - "--kubelet-registration-path=$(DRIVER_REG_SOCK_PATH)"
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: healthz
+            initialDelaySeconds: 5
+            timeoutSeconds: 5
           env:
             - name: ADDRESS
               value: /csi/csi.sock
@@ -280,9 +287,9 @@ spec:
                   fieldPath: spec.nodeName
           volumeMounts:
             - name: plugin-dir
-              mountPath: /csi/
+              mountPath: /csi
             - name: registration-dir
-              mountPath: /registration/
+              mountPath: /registration
         - name: civo-csi-plugin
           image: civo/csi:latest
           env:
@@ -301,7 +308,7 @@ spec:
               mountPath: /etc
               readOnly: true
             - name: pods-mount-dir
-              mountPath: /var/lib/kubelet
+              mountPath: /var/lib/kubelet/pods
               mountPropagation: "Bidirectional"
             - name: device-dir
               mountPath: /dev
@@ -309,14 +316,14 @@ spec:
         - name: registration-dir
           hostPath:
             path: /var/lib/kubelet/plugins_registry/
-            type: DirectoryOrCreate
+            type: Directory
         - name: plugin-dir
           hostPath:
-            path: /var/lib/kubelet/plugins/csi.civo.com
+            path: /var/lib/kubelet/plugins/csi.civo.com/
             type: DirectoryOrCreate
         - name: pods-mount-dir
           hostPath:
-            path: /var/lib/kubelet
+            path: /var/lib/kubelet/pods
             type: Directory
         - name: etc-dir
           hostPath:
