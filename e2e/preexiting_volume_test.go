@@ -3,7 +3,6 @@ package e2e
 import (
 	"context"
 	"testing"
-	"time"
 
 	. "github.com/onsi/gomega"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -70,6 +69,7 @@ func Test_ExistingCivoVolume(t *testing.T) {
 	err = e2eTest.tenantClient.Create(context.TODO(), pv)
 	g.Expect(err).ShouldNot(HaveOccurred())
 	defer func() {
+		t.Log("Clean up PV")
 		e2eTest.tenantClient.Get(context.TODO(), client.ObjectKeyFromObject(pv), pv)
 		e2eTest.tenantClient.Delete(context.TODO(), pv)
 	}()
@@ -93,6 +93,7 @@ func Test_ExistingCivoVolume(t *testing.T) {
 	err = e2eTest.tenantClient.Create(context.TODO(), pvc)
 	g.Expect(err).ShouldNot(HaveOccurred())
 	defer func() {
+		t.Log("Clean up PVC")
 		e2eTest.tenantClient.Get(context.TODO(), client.ObjectKeyFromObject(pvc), pvc)
 		e2eTest.tenantClient.Delete(context.TODO(), pvc)
 	}()
@@ -111,7 +112,5 @@ func Test_ExistingCivoVolume(t *testing.T) {
 
 	t.Log("Wait for deployment to become ready")
 	g.Eventually(deployStateFunc(context.TODO(), e2eTest.tenantClient, g, deployment), "3m", "5s").Should(Equal("ready"))
-
-	time.Sleep(30 * time.Second)
 
 }
