@@ -88,3 +88,18 @@ The steps are:
 4. Copy recursively the `deploy/kubernetes` folder to `deploy/kubernetes-dev` with `cp -rv deploy/kubernetes deploy/kubernetes-dev` and replace all occurences of `civo-csi:latest` in there with `YOUR_IMAGE_NAME:2h` (ENV variable interpolation won't work here), this folder is automatically in `.gitignore`
 5. In a test cluster (a Civo K3s 1 node cluster will work) you'll need to create a `Secret` within the `civo-system` called `api-access` containing the keys `api-key` set to your Civo API key, `api-url` pointing to either `https://api.civo.com` or a xip.io/ngrok pointing to your local development environment (depending on where your cluster is running) and `region` set to the region the current cluster is running in
 6. Deploy the Kubernetes resources required to the cluster with `kubectl apply -f deploy/kubernetes-dev`
+
+
+## e2e Testing
+
+There are e2e tests included in this repo that will provision a cluster and run integrations against the cluster. These tests require a valid Civo API key to be present in the .env file (sample provided) in the root of the project dir. The tests can be found in the e2e directory and can be run with the following
+
+```
+go test -v ./e2e/...
+```
+
+To aid in development, the tests can be run with a `-retain` flag to persist the provisioned cluster between test runs:
+
+```
+go test -v ./e2e/... -retain
+```
