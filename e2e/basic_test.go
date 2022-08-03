@@ -53,49 +53,7 @@ func Test_Basic(t *testing.T) {
 	}()
 
 	t.Log("Creating a Deployment Using the PVC")
-	replcas := int32(1)
-	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "volume-deployment",
-			Namespace: "default",
-		},
-		Spec: appsv1.DeploymentSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{"app": "volume-test"},
-			},
-
-			Replicas: &replcas,
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{"app": "volume-test"},
-				},
-				Spec: corev1.PodSpec{
-					Volumes: []corev1.Volume{
-						{
-							Name: "test-volume",
-							VolumeSource: corev1.VolumeSource{
-								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-									ClaimName: pvc.Name,
-								},
-							},
-						},
-					},
-					Containers: []corev1.Container{
-						{
-							Name:  "nginx",
-							Image: "k8s.gcr.io/nginx-slim:0.8",
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      "test-volume",
-									MountPath: "/usr/share/nginx/html",
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
+	deployment := deploymentSpec(pvc.Name)
 
 	err = e2eTest.tenantClient.Create(context.TODO(), deployment)
 	g.Expect(err).ShouldNot(HaveOccurred())
