@@ -77,6 +77,10 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 	for _, v := range volumes {
 		if v.Name == req.Name {
 			log.Debug().Str("volume_id", v.ID).Msg("Volume already exists")
+			if v.SizeGigabytes != int(desiredSize) {
+				return nil, status.Error(codes.AlreadyExists, "Volume already exists with a differnt size")
+
+			}
 
 			available, err := d.waitForVolumeStatus(&v, "available", CivoVolumeAvailableRetries)
 			if err != nil {
@@ -213,12 +217,22 @@ func (d *Driver) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest)
 func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.ControllerPublishVolumeRequest) (*csi.ControllerPublishVolumeResponse, error) {
 	log.Info().Str("volume_id", req.VolumeId).Msg("Request: ControllerPublishVolume")
 
+	if req.VolumeCapability == nil {
+		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeCapability to ControllerPublishVolume")
+	}
+
 	if req.VolumeId == "" {
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to ControllerPublishVolume")
 	}
 
 	if req.NodeId == "" {
 		return nil, status.Error(codes.InvalidArgument, "must provide a NodeId to ControllerPublishVolume")
+	}
+
+	log.Debug().Msg("Check if Node exits")
+	_, err := d.CivoClient.GetInstance(req.NodeId)
+	if err != nil {
+		return nil, status.Error(codes.NotFound, err.Error())
 	}
 
 	log.Debug().Msg("Finding volume in Civo API")
@@ -266,7 +280,7 @@ func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.Control
 	log.Debug().Msg("Finding volume in Civo API")
 	volume, err := d.CivoClient.GetVolume(req.VolumeId)
 	if err != nil {
-		if strings.Contains(err.Error(), "DatabaseVolumeNotFoundError") {
+		if strings.Contains(err.Error(), "DatabaseVolumeNotFoundError") || strings.Contains(err.Error(), "ZeroMatchesError") {
 			log.Info().Str("volume_id", req.VolumeId).Msg("Volume already deleted from Civo API, pretend it's unmounted")
 			return &csi.ControllerUnpublishVolumeResponse{}, nil
 		} else {
@@ -328,6 +342,11 @@ func (d *Driver) ValidateVolumeCapabilities(ctx context.Context, req *csi.Valida
 		return nil, status.Error(codes.InvalidArgument, "must provide VolumeCapabilities to ValidateVolumeCapabilities")
 	}
 
+	_, err := d.CivoClient.GetVolume(req.VolumeId)
+	if err != nil {
+		return nil, status.Error(codes.NotFound, "Unable to fetch volume from Civo API")
+	}
+
 	accessModeSupported := false
 	for _, cap := range req.VolumeCapabilities {
 		for _, m := range supportedAccessModes {
@@ -352,6 +371,10 @@ func (d *Driver) ValidateVolumeCapabilities(ctx context.Context, req *csi.Valida
 
 // ListVolumes returns the existing Civo volumes for this customer
 func (d *Driver) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (*csi.ListVolumesResponse, error) {
+	if req.StartingToken != "" {
+		return &csi.ListVolumesResponse{}, status.Errorf(codes.Aborted, "%v not supported", "starting-token")
+	}
+
 	log.Info().Msg("Request: ListVolumes")
 
 	log.Debug().Msg("Listing all volume in Civo API")
