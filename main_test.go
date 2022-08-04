@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/civo/civo-csi/pkg/driver"
+	"github.com/civo/civogo"
 	"github.com/kubernetes-csi/csi-test/v4/pkg/sanity"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -21,9 +22,13 @@ func TestCivoCSI(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	os.Setenv("NODE_ID", "12345")
 	os.Setenv("REGION", "TESTING1")
 	os.Setenv("NAMESPACE", "default")
+	instance, err := d.CivoClient.CreateInstance(&civogo.InstanceConfig{Hostname: "Test Instnace"})
+	if err != nil {
+		t.Fatalf("Unable to create test instance: %s", err.Error())
+	}
+	os.Setenv("NODE_ID", instance.ID)
 
 	var eg errgroup.Group
 	eg.Go(func() error {

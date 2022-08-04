@@ -122,19 +122,25 @@ func TestControllerPublishVolume(t *testing.T) {
 	t.Run("Publish a volume", func(t *testing.T) {
 		d, _ := driver.NewTestDriver()
 
+		instance, err := d.CivoClient.CreateInstance(&civogo.InstanceConfig{
+			Hostname: "instance-1",
+		})
+		assert.Nil(t, err)
+
 		volume, err := d.CivoClient.NewVolume(&civogo.VolumeConfig{
 			Name: "foo",
 		})
 		assert.Nil(t, err)
 
 		_, err = d.ControllerPublishVolume(context.Background(), &csi.ControllerPublishVolumeRequest{
-			VolumeId: volume.ID,
-			NodeId:   "instance-1",
+			VolumeId:         volume.ID,
+			NodeId:           instance.ID,
+			VolumeCapability: &csi.VolumeCapability{},
 		})
 		assert.Nil(t, err)
 
 		volumes, _ := d.CivoClient.ListVolumes()
-		assert.Equal(t, "instance-1", volumes[0].InstanceID)
+		assert.Equal(t, instance.ID, volumes[0].InstanceID)
 	})
 }
 

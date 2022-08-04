@@ -9,6 +9,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	mount "k8s.io/mount-utils"
 )
 
 // MaxVolumesPerNode is the maximum number of volumes a single node may host
@@ -120,6 +121,12 @@ func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolu
 
 	log.Debug().Str("volume_id", req.VolumeId).Str("from_path", req.StagingTargetPath).Str("to_path", req.TargetPath).Msg("Bind-mounting volume (publishing)")
 
+	err := os.MkdirAll(req.TargetPath, 0o750)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Debug().Str("volume_id", req.VolumeId).Str("targetPath", req.TargetPath).Msg("Ensuring target path exists")
 	// Mount the volume if not already mounted
 	mounted, err := d.DiskHotPlugger.IsMounted(req.TargetPath)
 	if err != nil {
@@ -151,16 +158,41 @@ func (d *Driver) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublish
 		return nil, status.Error(codes.InvalidArgument, "must provide a TargetPath to NodeUnpublishVolume")
 	}
 
-	log.Info().Str("volume_id", req.VolumeId).Str("path", req.TargetPath).Msg("Removing bind-mount for volume (unpublishing)")
+	targetPath := req.GetTargetPath()
+	log.Info().Str("volume_id", req.VolumeId).Str("path", targetPath).Msg("Removing bind-mount for volume (unpublishing)")
 
-	mounted, err := d.DiskHotPlugger.IsMounted(req.TargetPath)
+	mounted, err := d.DiskHotPlugger.IsMounted(targetPath)
 	if err != nil {
-		return nil, err
+		if os.IsNotExist(err) {
+			log.Debug().Str("targetPath", targetPath).Msg("targetPath has already been deleted")
+
+			return &csi.NodeUnpublishVolumeResponse{}, nil
+		}
+		if !mount.IsCorruptedMnt(err) {
+			return &csi.NodeUnpublishVolumeResponse{}, err
+		}
+
+		mounted = true
 	}
 	log.Debug().Str("volume_id", req.VolumeId).Bool("mounted", mounted).Msg("Checking if currently mounting")
 
-	if mounted {
-		d.DiskHotPlugger.Unmount(req.TargetPath)
+	if !mounted {
+		if err = os.RemoveAll(targetPath); err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+
+		return &csi.NodeUnpublishVolumeResponse{}, nil
+	}
+
+	err = d.DiskHotPlugger.Unmount(targetPath)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Info().Str("volume_id", req.VolumeId).Str("target_path", targetPath).Msg("Removing target path")
+	err = os.Remove(targetPath)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 
 	return &csi.NodeUnpublishVolumeResponse{}, nil
