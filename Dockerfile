@@ -29,7 +29,7 @@ COPY --from=builder /app/civo-csi /app/civo-csi
 
 RUN chmod +x /app/civo-csi
 
-RUN apk add --update --no-cache findmnt blkid e2fsprogs
+RUN apk add --update --no-cache findmnt blkid e2fsprogs e2fsprogs-extra
 
 # Run the civo-csi binary
 ENTRYPOINT ["/app/civo-csi"]

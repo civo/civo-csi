@@ -56,7 +56,7 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 	}
 
 	// Determine required size
-	bytes, err := getVolSizeInBytes(req)
+	bytes, err := getVolSizeInBytes(req.GetCapacityRange())
 	if err != nil {
 		return nil, err
 	}
@@ -165,6 +165,7 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 // waitForVolumeAvailable will just sleep/loop waiting for Civo's API to report it's available, or hit a defined
 // number of retries
 func (d *Driver) waitForVolumeStatus(vol *civogo.Volume, desiredStatus string, retries int) (bool, error) {
+	log.Info().Str("volume_id", vol.ID).Str("desired_state", desiredStatus).Msg("Waiting for Volume to entered desired state")
 	var v *civogo.Volume
 	var err error
 
@@ -185,7 +186,7 @@ func (d *Driver) waitForVolumeStatus(vol *civogo.Volume, desiredStatus string, r
 			return true, nil
 		}
 	}
-	return false, fmt.Errorf("Volume isn't %s, state is currently %s", desiredStatus, v.Status)
+	return false, fmt.Errorf("volume isn't %s, state is currently %s", desiredStatus, v.Status)
 }
 
 // DeleteVolume is used once a volume is unused and therefore unmounted, to stop the resources being used and subsequent billing
@@ -215,7 +216,7 @@ func (d *Driver) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest)
 
 // ControllerPublishVolume is used to mount an underlying volume to required k3s node
 func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.ControllerPublishVolumeRequest) (*csi.ControllerPublishVolumeResponse, error) {
-	log.Info().Str("volume_id", req.VolumeId).Msg("Request: ControllerPublishVolume")
+	log.Info().Str("volume_id", req.VolumeId).Str("node_id", req.NodeId).Msg("Request: ControllerPublishVolume")
 
 	if req.VolumeCapability == nil {
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeCapability to ControllerPublishVolume")
@@ -230,9 +231,19 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 	}
 
 	log.Debug().Msg("Check if Node exits")
-	_, err := d.CivoClient.GetInstance(req.NodeId)
+	cluster, err := d.CivoClient.GetKubernetesCluster(d.ClusterID)
 	if err != nil {
-		return nil, status.Error(codes.NotFound, err.Error())
+		return nil, status.Error(codes.Internal, fmt.Sprintf("unable to connect to Civo Api. error: %s", err.Error()))
+	}
+	found := false
+	for _, instance := range cluster.Instances {
+		if instance.ID == req.NodeId {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return nil, status.Error(codes.NotFound, "Unable to find instance ")
 	}
 
 	log.Debug().Msg("Finding volume in Civo API")
@@ -320,9 +331,69 @@ func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.Control
 	return nil, status.Errorf(codes.Unavailable, "Civo Volume did not go back to 'available'")
 }
 
-// ControllerExpandVolume is unsupported at the moment in Civo
-func (d *Driver) ControllerExpandVolume(context.Context, *csi.ControllerExpandVolumeRequest) (*csi.ControllerExpandVolumeResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "")
+// ControllerExpandVolume allows for offline expansion of Volumes
+func (d *Driver) ControllerExpandVolume(ctx context.Context, req *csi.ControllerExpandVolumeRequest) (*csi.ControllerExpandVolumeResponse, error) {
+	volId := req.GetVolumeId()
+
+	log.Info().Str("volume_id", volId).Msg("Request: ControllerExpandVolume")
+
+	if volId == "" {
+		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to ControllerExpandVolume")
+	}
+
+	// Get the volume from the Civo API
+	volume, err := d.CivoClient.GetVolume(volId)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "ControllerExpandVolume could not retrieve existing volume: %v", err)
+	}
+
+	if req.CapacityRange == nil {
+		return nil, status.Error(codes.InvalidArgument, "must provide a capacity range to ControllerExpandVolume")
+	}
+	bytes, err := getVolSizeInBytes(req.GetCapacityRange())
+	if err != nil {
+		return nil, err
+	}
+	desiredSize := bytes / BytesInGigabyte
+	if (bytes % BytesInGigabyte) != 0 {
+		desiredSize++
+	}
+	log.Debug().Int("current_size", volume.SizeGigabytes).Int64("desired_size", desiredSize).Str("state", volume.Status).Msg("Volume found")
+
+	if volume.Status == "resizing" {
+		return nil, status.Error(codes.Aborted, "volume is already being resized")
+	}
+
+	if desiredSize <= int64(volume.SizeGigabytes) {
+		log.Info().Str("volume_id", volId).Msg("Volume is currently larger that desired Size")
+		return &csi.ControllerExpandVolumeResponse{CapacityBytes: int64(volume.SizeGigabytes) * BytesInGigabyte, NodeExpansionRequired: true}, nil
+	}
+
+	if volume.Status != "available" {
+		return nil, status.Error(codes.FailedPrecondition, "volume is not in an availble state for OFFLINE expansion")
+	}
+
+	log.Info().Int64("size_gb", desiredSize).Str("volume_id", volId).Msg("Volume resize request sent")
+	d.CivoClient.ResizeVolume(volId, int(desiredSize))
+
+	// Resizes can take a while, double the number of normal retries
+	available, err := d.waitForVolumeStatus(volume, "available", CivoVolumeAvailableRetries*2)
+	if err != nil {
+		log.Error().Err(err).Msg("Unable to wait for volume availability in Civo API")
+		return nil, err
+	}
+
+	if !available {
+		return nil, status.Error(codes.Internal, "failed to wait for volume to be in an available state")
+	}
+
+	volume, _ = d.CivoClient.GetVolume(volId)
+	log.Info().Int64("size_gb", int64(volume.SizeGigabytes)).Str("volume_id", volId).Msg("Volume succesfully resized")
+	return &csi.ControllerExpandVolumeResponse{
+		CapacityBytes:         int64(volume.SizeGigabytes) * BytesInGigabyte,
+		NodeExpansionRequired: true,
+	}, nil
+
 }
 
 // ControllerGetVolume is for optional Kubernetes health checking of volumes and we don't support it yet
@@ -444,6 +515,7 @@ func (d *Driver) ControllerGetCapabilities(context.Context, *csi.ControllerGetCa
 		csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME,
 		csi.ControllerServiceCapability_RPC_LIST_VOLUMES,
 		csi.ControllerServiceCapability_RPC_GET_CAPACITY,
+		csi.ControllerServiceCapability_RPC_EXPAND_VOLUME,
 	}
 
 	var csc []*csi.ControllerServiceCapability
@@ -482,10 +554,9 @@ func (d *Driver) ListSnapshots(context.Context, *csi.ListSnapshotsRequest) (*csi
 	return nil, status.Error(codes.Unimplemented, "")
 }
 
-func getVolSizeInBytes(req *csi.CreateVolumeRequest) (int64, error) {
+func getVolSizeInBytes(capRange *csi.CapacityRange) (int64, error) {
 	var bytes int64
 
-	capRange := req.GetCapacityRange()
 	if capRange == nil {
 		return int64(DefaultVolumeSizeGB) * BytesInGigabyte, nil
 	}

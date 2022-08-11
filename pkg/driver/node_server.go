@@ -2,6 +2,7 @@ package driver
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/BurntSushi/toml"
@@ -227,9 +228,38 @@ func (d *Driver) NodeGetVolumeStats(ctx context.Context, req *csi.NodeGetVolumeS
 	return nil, status.Error(codes.Unimplemented, "")
 }
 
-// NodeExpandVolume is used to expand the filesystem inside volumes, but we don't support that yet
+// NodeExpandVolume is used to expand the filesystem inside volumes
 func (d *Driver) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandVolumeRequest) (*csi.NodeExpandVolumeResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "")
+	log.Info().Str("volume_id", req.VolumeId).Str("target_path", req.VolumePath).Msg("Request: NodeExpandVolume")
+	if req.VolumeId == "" {
+		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to NodeExpandVolume")
+	}
+	if req.VolumePath == "" {
+		return nil, status.Error(codes.InvalidArgument, "must provide a VolumePath to NodeExpandVolume")
+	}
+
+	_, err := d.CivoClient.GetVolume(req.VolumeId)
+	if err != nil {
+		return nil, status.Error(codes.NotFound, "unable to fund VolumeID to NodeExpandVolume")
+
+	}
+	// Find the disk attachment location
+	attachedDiskPath := d.DiskHotPlugger.PathForVolume(req.VolumeId)
+	if attachedDiskPath == "" {
+		err := status.Error(codes.NotFound, "path to volume (/dev/disk/by-id/VOLUME_ID) not found")
+		log.Error().Str("volume_id", req.VolumeId).Err(err)
+		return nil, err
+	}
+
+	log.Info().Str("volume_id", req.VolumeId).Str("path", attachedDiskPath).Msg("Expanding Volume")
+	err = d.DiskHotPlugger.ExpandFilesystem(d.DiskHotPlugger.PathForVolume(req.VolumeId))
+	if err != nil {
+		return nil, status.Error(codes.Internal, fmt.Sprintf("failed to expand file system: %s", err.Error()))
+	}
+
+	// TODO: Get new size for resposne
+
+	return &csi.NodeExpandVolumeResponse{}, nil
 }
 
 // NodeGetCapabilities returns the capabilities that this node and driver support
@@ -241,6 +271,13 @@ func (d *Driver) NodeGetCapabilities(ctx context.Context, req *csi.NodeGetCapabi
 				Type: &csi.NodeServiceCapability_Rpc{
 					Rpc: &csi.NodeServiceCapability_RPC{
 						Type: csi.NodeServiceCapability_RPC_STAGE_UNSTAGE_VOLUME,
+					},
+				},
+			},
+			{
+				Type: &csi.NodeServiceCapability_Rpc{
+					Rpc: &csi.NodeServiceCapability_RPC{
+						Type: csi.NodeServiceCapability_RPC_EXPAND_VOLUME,
 					},
 				},
 			},

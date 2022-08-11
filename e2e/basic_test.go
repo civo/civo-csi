@@ -8,8 +8,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -27,30 +25,10 @@ func Test_Basic(t *testing.T) {
 	g := NewGomegaWithT(t)
 
 	t.Log("Creating a PVC")
-	storageClassName := "civo-volume"
-	pvc := &corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-volume",
-			Namespace: "default",
-		},
-		Spec: corev1.PersistentVolumeClaimSpec{
-			StorageClassName: &storageClassName,
-			AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-			Resources: corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{
-					"storage": resource.MustParse("10Gi"),
-				},
-			},
-		},
-	}
+	pvc := pvcSpec()
 	err := e2eTest.tenantClient.Create(context.TODO(), pvc)
 	g.Expect(err).ShouldNot(HaveOccurred())
-
-	defer func() {
-		t.Log("Clean up PVC")
-		e2eTest.tenantClient.Get(context.TODO(), client.ObjectKeyFromObject(pvc), pvc)
-		e2eTest.tenantClient.Delete(context.TODO(), pvc)
-	}()
+	defer e2eTest.cleanUp(pvc)
 
 	t.Log("Creating a Deployment Using the PVC")
 	deployment := deploymentSpec(pvc.Name)
@@ -58,11 +36,7 @@ func Test_Basic(t *testing.T) {
 	err = e2eTest.tenantClient.Create(context.TODO(), deployment)
 	g.Expect(err).ShouldNot(HaveOccurred())
 
-	defer func() {
-		t.Log("Clean up Deployment")
-		e2eTest.tenantClient.Get(context.TODO(), client.ObjectKeyFromObject(deployment), deployment)
-		e2eTest.tenantClient.Delete(context.TODO(), deployment)
-	}()
+	defer e2eTest.cleanUp(deployment)
 
 	t.Log("Wait for deployment to become ready")
 	g.Eventually(deployStateFunc(context.TODO(), e2eTest.tenantClient, g, deployment), "3m", "5s").Should(Equal("ready"))
@@ -102,6 +76,8 @@ func Test_Basic(t *testing.T) {
 	t.Log("Wait for deployment to become ready")
 	g.Eventually(deployStateFunc(context.TODO(), e2eTest.tenantClient, g, deployment), "3m", "5s").Should(Equal("ready"))
 
+	e2eTest.cleanUp(deployment)
+	e2eTest.cleanUp(pvc)
 }
 
 func deployStateFunc(ctx context.Context, c client.Client, g *WithT, deployment *appsv1.Deployment) func() string {

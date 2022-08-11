@@ -21,6 +21,9 @@ type DiskHotPlugger interface {
 	// Format erases the path with a new empty filesystem
 	Format(path, filesystem string) error
 
+	// ExpandFilesytem expands the existing file system at the given path
+	ExpandFilesystem(path string) error
+
 	// Mount the path to the mountpoint, specifying the current filesystem and mount flags to use
 	Mount(path, mountpoint, filesystem string, flags ...string) error
 
@@ -46,13 +49,35 @@ func (p *RealDiskHotPlugger) PathForVolume(volumeID string) string {
 	return ""
 }
 
+// ExpandFilesytem expands the existing file system at the given path
+func (p *RealDiskHotPlugger) ExpandFilesystem(path string) error {
+	log.Debug().Str("path", path).Msg("Resizing")
+
+	formatted, err := p.IsFormatted(path)
+	if err != nil {
+		return err
+	}
+
+	if !formatted {
+		return fmt.Errorf("path given to expand filesystem must already be formatted: %s", path)
+	}
+
+	output, err := exec.Command("/usr/sbin/resize2fs", path).CombinedOutput()
+	log.Debug().Str("output", string(output)).Msg("Resize2fs command output")
+	if err != nil {
+		return fmt.Errorf("resizing with 'resize2fs %s' failed: %v output: %s", path, err, string(output))
+	}
+
+	return nil
+}
+
 // Format erases the path with a new empty filesystem
 func (p *RealDiskHotPlugger) Format(path, filesystem string) error {
 	log.Debug().Str("path", path).Str("filesystem", filesystem).Msg("Formatting")
 
 	output, err := exec.Command(("mkfs." + filesystem), path).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("Formatting with 'mkfs.%s %s' failed: %v output: %s", filesystem, path, err, string(output))
+		return fmt.Errorf("formatting with 'mkfs.%s %s' failed: %v output: %s", filesystem, path, err, string(output))
 	}
 
 	formatted, err := p.IsFormatted(path)
@@ -60,7 +85,7 @@ func (p *RealDiskHotPlugger) Format(path, filesystem string) error {
 		return err
 	}
 	if !formatted {
-		return fmt.Errorf("Failed to ensure it was formatted, output of 'mkfs.%s %s' is %s", filesystem, path, string(output))
+		return fmt.Errorf("failed to ensure it was formatted, output of 'mkfs.%s %s' is %s", filesystem, path, string(output))
 	}
 
 	return nil
@@ -107,7 +132,7 @@ func (p *RealDiskHotPlugger) Mount(path, mountpoint, filesystem string, flags ..
 
 	output, err := exec.Command("mount", args...).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("Mounting with 'mount %s' failed: %v output: %s", strings.Join(args, " "), err, string(output))
+		return fmt.Errorf("mounting with 'mount %s' failed: %v output: %s", strings.Join(args, " "), err, string(output))
 	}
 
 	mounted, err := p.IsMounted(mountpoint)
@@ -115,7 +140,7 @@ func (p *RealDiskHotPlugger) Mount(path, mountpoint, filesystem string, flags ..
 		return err
 	}
 	if !mounted {
-		return fmt.Errorf("After apparently successful mounting, still not mounted - mount %s output: %s", strings.Join(args, " "), string(output))
+		return fmt.Errorf("after apparently successful mounting, still not mounted - mount %s output: %s", strings.Join(args, " "), string(output))
 	}
 
 	log.Debug().Str("path", path).Str("filesystem", filesystem).Str("mountpoint", mountpoint).Msg("Mounting succeeded")
@@ -129,7 +154,7 @@ func (p *RealDiskHotPlugger) Unmount(mountpoint string) error {
 	output, err := exec.Command("umount", mountpoint).CombinedOutput()
 	log.Debug().Str("output", string(output)).Msg("Unmounting command output")
 	if err != nil {
-		return fmt.Errorf("Unmounting with 'umount %s' failed: %v output: %s", mountpoint, err, string(output))
+		return fmt.Errorf("unmounting with 'umount %s' failed: %v output: %s", mountpoint, err, string(output))
 	}
 
 	return nil
@@ -214,6 +239,7 @@ type FakeDiskHotPlugger struct {
 	Filesystem            string
 	Formatted             bool
 	FormatCalled          bool
+	ExpandCalled          bool
 	Device                string
 	Mountpoint            string
 	Mounted               bool
@@ -222,7 +248,7 @@ type FakeDiskHotPlugger struct {
 
 // PathForVolume returns the path of the hotplugged disk
 func (p *FakeDiskHotPlugger) PathForVolume(volumeID string) string {
-	if p.DiskAttachmentMissing == true {
+	if p.DiskAttachmentMissing {
 		return ""
 	}
 
@@ -234,6 +260,16 @@ func (p *FakeDiskHotPlugger) Format(path, filesystem string) error {
 	p.Device = path
 	p.Formatted = true
 	p.FormatCalled = true
+	return nil
+}
+
+func (p *FakeDiskHotPlugger) ExpandFilesystem(path string) error {
+	if !p.Formatted {
+		return fmt.Errorf("disk must be formatted before being expanded")
+	}
+	p.Device = path
+	p.ExpandCalled = true
+
 	return nil
 }
 
