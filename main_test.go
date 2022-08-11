@@ -24,11 +24,13 @@ func TestCivoCSI(t *testing.T) {
 
 	os.Setenv("REGION", "TESTING1")
 	os.Setenv("NAMESPACE", "default")
-	instance, err := d.CivoClient.CreateInstance(&civogo.InstanceConfig{Hostname: "Test Instnace"})
-	if err != nil {
-		t.Fatalf("Unable to create test instance: %s", err.Error())
-	}
-	os.Setenv("NODE_ID", instance.ID)
+	cluster, _ := d.CivoClient.NewKubernetesClusters(&civogo.KubernetesClusterConfig{
+		Name:           "test",
+		NumTargetNodes: 1,
+	})
+	os.Setenv("NODE_ID", cluster.Pools[0].Instances[0].ID)
+	d.ClusterID = cluster.ID
+	os.Setenv("CLUSTER_ID", cluster.ID)
 
 	var eg errgroup.Group
 	eg.Go(func() error {

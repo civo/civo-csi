@@ -106,7 +106,7 @@ func TestMain(m *testing.M) {
 		log.Panic(err)
 	}
 
-	controller.Spec.Template.Spec.Containers[2].Image = Image
+	controller.Spec.Template.Spec.Containers[3].Image = Image
 	e2eTest.tenantClient.Update(context.TODO(), controller)
 	if err != nil {
 		log.Panic(err)
@@ -215,4 +215,9 @@ func retry(attempts int, sleep time.Duration, f func() error) (err error) {
 		}
 	}
 	return fmt.Errorf("after %d attempts, last error: %s", attempts, err)
+}
+
+func (e *E2ETest) cleanUp(obj client.Object) {
+	e.tenantClient.Get(context.TODO(), client.ObjectKeyFromObject(obj), obj)
+	e.tenantClient.Delete(context.TODO(), obj)
 }

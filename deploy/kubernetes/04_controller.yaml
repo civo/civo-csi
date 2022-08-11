@@ -57,6 +57,19 @@ spec:
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/kubelet/plugins/csi.civo.com
+        - name: csi-resizer
+          image: k8s.gcr.io/sig-storage/csi-resizer:v1.4.0	
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+            - "--timeout=10m"
+          env:
+            - name: ADDRESS
+              value: /var/lib/kubelet/plugins/csi.civo.com/csi.sock
+          imagePullPolicy: "IfNotPresent"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/kubelet/plugins/csi.civo.com
         - name: civo-csi-plugin
           image: civo/csi:latest
           env:

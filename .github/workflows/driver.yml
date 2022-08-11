@@ -13,7 +13,7 @@ jobs:
         with:
           go-version: "^1.15"
       - name: Run tests
-        run: go test ./...
+        run: go test ./main_test.go
       - name: Run vetting/linting checks
         run: go vet ./...
   build:
