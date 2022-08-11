@@ -64,6 +64,31 @@ spec:
         - name: civo-csi-plugin
           image: civo/csi:latest
           env:
+            - name: CIVO_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: api-key
+                  name: civo-api-access
+            - name: CIVO_REGION
+              valueFrom:
+                secretKeyRef:
+                  key: region
+                  name: civo-api-access
+            - name: CIVO_NAMESPACE
+              valueFrom:
+                secretKeyRef:
+                  key: namespace
+                  name: civo-api-access
+            - name: CIVO_CLUSTER_ID
+              valueFrom:
+                secretKeyRef:
+                  key: cluster-id
+                  name: civo-api-access
+            - name: CIVO_API_URL
+              valueFrom:
+                secretKeyRef:
+                  key: api-url
+                  name: civo-api-access
             - name: CSI_ENDPOINT
               value: unix:///csi/csi.sock
           imagePullPolicy: "Always"
