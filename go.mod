@@ -10,6 +10,7 @@ require (
 	github.com/rs/zerolog v1.20.0
 	github.com/stretchr/testify v1.7.1
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+	golang.org/x/sys v0.0.0-20220209214540-3681064d5158
 	google.golang.org/grpc v1.47.0
 	k8s.io/api v0.24.3
 	k8s.io/apimachinery v0.24.3

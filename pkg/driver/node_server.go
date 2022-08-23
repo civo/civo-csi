@@ -223,9 +223,53 @@ func (d *Driver) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoRequest) (
 	}, nil
 }
 
-// NodeGetVolumeStats reports on volume health, but we don't implement it yet
+// NodeGetVolumeStats returns the volume capacity statistics available for the the given volume
 func (d *Driver) NodeGetVolumeStats(ctx context.Context, req *csi.NodeGetVolumeStatsRequest) (*csi.NodeGetVolumeStatsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "")
+	log.Info().Str("volume_id", req.VolumeId).Msg("Request: NodeGetVolumeStats")
+
+	if req.VolumeId == "" {
+		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to NodeGetVolumeStats")
+	}
+
+	volumePath := req.VolumePath
+	if volumePath == "" {
+		return nil, status.Error(codes.InvalidArgument, "must provide a VolumePath to NodeGetVolumeStats")
+	}
+
+	mounted, err := d.DiskHotPlugger.IsMounted(volumePath)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to check if volume path %q is mounted: %s", volumePath, err)
+	}
+
+	if !mounted {
+		return nil, status.Errorf(codes.NotFound, "volume path %q is not mounted", volumePath)
+	}
+
+	stats, err := d.DiskHotPlugger.GetStatistics(volumePath)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to retrieve capacity statistics for volume path %q: %s", volumePath, err)
+	}
+
+	log.Info().Int64("bytes_available", stats.AvailableBytes).Int64("bytes_total", stats.TotalBytes).
+		Int64("bytes_used", stats.UsedBytes).Int64("inodes_available", stats.AvailableInodes).Int64("inodes_total", stats.TotalInodes).
+		Int64("inodes_used", stats.UsedInodes).Msg("Node capacity statistics retrieved")
+
+	return &csi.NodeGetVolumeStatsResponse{
+		Usage: []*csi.VolumeUsage{
+			{
+				Available: stats.AvailableBytes,
+				Total:     stats.TotalBytes,
+				Used:      stats.UsedBytes,
+				Unit:      csi.VolumeUsage_BYTES,
+			},
+			{
+				Available: stats.AvailableInodes,
+				Total:     stats.TotalInodes,
+				Used:      stats.UsedInodes,
+				Unit:      csi.VolumeUsage_INODES,
+			},
+		},
+	}, nil
 }
 
 // NodeExpandVolume is used to expand the filesystem inside volumes
@@ -278,6 +322,13 @@ func (d *Driver) NodeGetCapabilities(ctx context.Context, req *csi.NodeGetCapabi
 				Type: &csi.NodeServiceCapability_Rpc{
 					Rpc: &csi.NodeServiceCapability_RPC{
 						Type: csi.NodeServiceCapability_RPC_EXPAND_VOLUME,
+					},
+				},
+			},
+			{
+				Type: &csi.NodeServiceCapability_Rpc{
+					Rpc: &csi.NodeServiceCapability_RPC{
+						Type: csi.NodeServiceCapability_RPC_GET_VOLUME_STATS,
 					},
 				},
 			},
