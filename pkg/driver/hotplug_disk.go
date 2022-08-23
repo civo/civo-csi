@@ -326,6 +326,9 @@ func (p *FakeDiskHotPlugger) IsFormatted(path string) (bool, error) {
 
 // IsMounted returns true if the target has a disk mounted there
 func (p *FakeDiskHotPlugger) IsMounted(target string) (bool, error) {
+	if p.Mountpoint != target {
+		return false, nil
+	}
 	return p.Mounted, nil
 }
 
