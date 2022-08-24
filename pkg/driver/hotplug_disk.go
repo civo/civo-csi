@@ -10,9 +10,15 @@ import (
 	"syscall"
 
 	"github.com/rs/zerolog/log"
+	"golang.org/x/sys/unix"
 )
 
 const BlikidNotFound int = 2
+
+type VolumeStatistics struct {
+	AvailableBytes, TotalBytes, UsedBytes    int64
+	AvailableInodes, TotalInodes, UsedInodes int64
+}
 
 type DiskHotPlugger interface {
 	// PathForVolume returns the path of the hotplugged disk
@@ -35,6 +41,9 @@ type DiskHotPlugger interface {
 
 	// IsMounted returns true if the target has a disk mounted there
 	IsMounted(target string) (bool, error)
+
+	// GetStatistics returns capacity-related volume statistics for the given volume path.
+	GetStatistics(volumePath string) (VolumeStatistics, error)
 }
 
 type RealDiskHotPlugger struct{}
@@ -234,6 +243,27 @@ func (p *RealDiskHotPlugger) IsMounted(path string) (bool, error) {
 	return true, nil
 }
 
+func (p *RealDiskHotPlugger) GetStatistics(volumePath string) (VolumeStatistics, error) {
+	var statfs unix.Statfs_t
+	// See http://man7.org/linux/man-pages/man2/statfs.2.html for details.
+	err := unix.Statfs(volumePath, &statfs)
+	if err != nil {
+		return VolumeStatistics{}, err
+	}
+
+	volStats := VolumeStatistics{
+		AvailableBytes: int64(statfs.Bavail) * int64(statfs.Bsize),
+		TotalBytes:     int64(statfs.Blocks) * int64(statfs.Bsize),
+		UsedBytes:      (int64(statfs.Blocks) - int64(statfs.Bfree)) * int64(statfs.Bsize),
+
+		AvailableInodes: int64(statfs.Ffree),
+		TotalInodes:     int64(statfs.Files),
+		UsedInodes:      int64(statfs.Files) - int64(statfs.Ffree),
+	}
+
+	return volStats, nil
+}
+
 type FakeDiskHotPlugger struct {
 	DiskAttachmentMissing bool
 	Filesystem            string
@@ -296,5 +326,20 @@ func (p *FakeDiskHotPlugger) IsFormatted(path string) (bool, error) {
 
 // IsMounted returns true if the target has a disk mounted there
 func (p *FakeDiskHotPlugger) IsMounted(target string) (bool, error) {
+	if p.Mountpoint != target {
+		return false, nil
+	}
 	return p.Mounted, nil
+}
+
+func (p *FakeDiskHotPlugger) GetStatistics(volumePath string) (VolumeStatistics, error) {
+	return VolumeStatistics{
+		AvailableBytes: 3 * BytesInGigabyte,
+		TotalBytes:     10 * BytesInGigabyte,
+		UsedBytes:      7 * BytesInGigabyte,
+
+		AvailableInodes: 3000,
+		TotalInodes:     10000,
+		UsedInodes:      7000,
+	}, nil
 }

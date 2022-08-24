@@ -159,3 +159,25 @@ func TestNodeGetInfo(t *testing.T) {
 		assert.Equal(t, "TESTING", resp.AccessibleTopology.Segments["region"])
 	})
 }
+
+func TestNodeGetVolumeStats(t *testing.T) {
+	t.Run("Format and mount the volume to a global mount path", func(t *testing.T) {
+		d, _ := driver.NewTestDriver()
+		hotPlugger := &driver.FakeDiskHotPlugger{
+			Formatted:  true,
+			Mounted:    true,
+			Mountpoint: "/mnt/volume-1",
+		}
+		d.DiskHotPlugger = hotPlugger
+
+		stats, err := d.DiskHotPlugger.GetStatistics(hotPlugger.Mountpoint)
+		assert.Nil(t, err)
+
+		assert.Equal(t, stats.AvailableBytes, int64(3221225472))
+		assert.Equal(t, stats.TotalBytes, int64(10737418240))
+		assert.Equal(t, stats.UsedBytes, int64(7516192768))
+		assert.Equal(t, stats.AvailableInodes, int64(3000))
+		assert.Equal(t, stats.TotalInodes, int64(10000))
+		assert.Equal(t, stats.UsedInodes, int64(7000))
+	})
+}
