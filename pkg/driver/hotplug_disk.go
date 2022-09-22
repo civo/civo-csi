@@ -15,13 +15,11 @@ import (
 
 const BlikidNotFound int = 2
 
-// VolumeStatistics represents the statistics of a volume
 type VolumeStatistics struct {
 	AvailableBytes, TotalBytes, UsedBytes    int64
 	AvailableInodes, TotalInodes, UsedInodes int64
 }
 
-// DiskHotPlugger is an interface for hotplugging disks
 type DiskHotPlugger interface {
 	// PathForVolume returns the path of the hotplugged disk
 	PathForVolume(volumeID string) string
@@ -60,7 +58,7 @@ func (p *RealDiskHotPlugger) PathForVolume(volumeID string) string {
 	return ""
 }
 
-// ExpandFilesystem expands the existing file system at the given path
+// ExpandFilesytem expands the existing file system at the given path
 func (p *RealDiskHotPlugger) ExpandFilesystem(path string) error {
 	log.Debug().Str("path", path).Msg("Resizing")
 
@@ -245,7 +243,6 @@ func (p *RealDiskHotPlugger) IsMounted(path string) (bool, error) {
 	return true, nil
 }
 
-// GetStatistics returns the statistics for a given volume path.
 func (p *RealDiskHotPlugger) GetStatistics(volumePath string) (VolumeStatistics, error) {
 	var statfs unix.Statfs_t
 	// See http://man7.org/linux/man-pages/man2/statfs.2.html for details.
@@ -267,7 +264,6 @@ func (p *RealDiskHotPlugger) GetStatistics(volumePath string) (VolumeStatistics,
 	return volStats, nil
 }
 
-// FakeDiskHotPlugger is a fake implementation of RealDiskHotPlugger
 type FakeDiskHotPlugger struct {
 	DiskAttachmentMissing bool
 	Filesystem            string
@@ -297,7 +293,6 @@ func (p *FakeDiskHotPlugger) Format(path, filesystem string) error {
 	return nil
 }
 
-// ExpandFilesystem expands the existing file system at the given path
 func (p *FakeDiskHotPlugger) ExpandFilesystem(path string) error {
 	if !p.Formatted {
 		return fmt.Errorf("disk must be formatted before being expanded")
@@ -337,7 +332,6 @@ func (p *FakeDiskHotPlugger) IsMounted(target string) (bool, error) {
 	return p.Mounted, nil
 }
 
-// GetStatistics returns the statistics for the given volume path
 func (p *FakeDiskHotPlugger) GetStatistics(volumePath string) (VolumeStatistics, error) {
 	return VolumeStatistics{
 		AvailableBytes: 3 * BytesInGigabyte,

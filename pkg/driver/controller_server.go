@@ -16,7 +16,6 @@ import (
 // BytesInGigabyte describes how many bytes are in a gigabyte
 const BytesInGigabyte int64 = 1024 * 1024 * 1024
 
-// CivoVolumeAvailableRetries is the number of times we will retry to check if a volume is available
 const CivoVolumeAvailableRetries int = 20
 
 var supportedAccessModes = []csi.VolumeCapability_AccessMode_Mode{
@@ -295,8 +294,9 @@ func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.Control
 		if strings.Contains(err.Error(), "DatabaseVolumeNotFoundError") || strings.Contains(err.Error(), "ZeroMatchesError") {
 			log.Info().Str("volume_id", req.VolumeId).Msg("Volume already deleted from Civo API, pretend it's unmounted")
 			return &csi.ControllerUnpublishVolumeResponse{}, nil
+		} else {
+			log.Debug().Str("message", err.Error()).Msg("Error didn't match DatabaseVolumeNotFoundError")
 		}
-		log.Debug().Str("message", err.Error()).Msg("Error didn't match DatabaseVolumeNotFoundError")
 
 		log.Error().Err(err).Msg("Unable to find volume for unpublishing in Civo API")
 		return nil, err
@@ -333,16 +333,16 @@ func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.Control
 
 // ControllerExpandVolume allows for offline expansion of Volumes
 func (d *Driver) ControllerExpandVolume(ctx context.Context, req *csi.ControllerExpandVolumeRequest) (*csi.ControllerExpandVolumeResponse, error) {
-	volID := req.GetVolumeId()
+	volId := req.GetVolumeId()
 
-	log.Info().Str("volume_id", volID).Msg("Request: ControllerExpandVolume")
+	log.Info().Str("volume_id", volId).Msg("Request: ControllerExpandVolume")
 
-	if volID == "" {
+	if volId == "" {
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to ControllerExpandVolume")
 	}
 
 	// Get the volume from the Civo API
-	volume, err := d.CivoClient.GetVolume(volID)
+	volume, err := d.CivoClient.GetVolume(volId)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "ControllerExpandVolume could not retrieve existing volume: %v", err)
 	}
@@ -365,7 +365,7 @@ func (d *Driver) ControllerExpandVolume(ctx context.Context, req *csi.Controller
 	}
 
 	if desiredSize <= int64(volume.SizeGigabytes) {
-		log.Info().Str("volume_id", volID).Msg("Volume is currently larger that desired Size")
+		log.Info().Str("volume_id", volId).Msg("Volume is currently larger that desired Size")
 		return &csi.ControllerExpandVolumeResponse{CapacityBytes: int64(volume.SizeGigabytes) * BytesInGigabyte, NodeExpansionRequired: true}, nil
 	}
 
@@ -373,8 +373,8 @@ func (d *Driver) ControllerExpandVolume(ctx context.Context, req *csi.Controller
 		return nil, status.Error(codes.FailedPrecondition, "volume is not in an availble state for OFFLINE expansion")
 	}
 
-	log.Info().Int64("size_gb", desiredSize).Str("volume_id", volID).Msg("Volume resize request sent")
-	d.CivoClient.ResizeVolume(volID, int(desiredSize))
+	log.Info().Int64("size_gb", desiredSize).Str("volume_id", volId).Msg("Volume resize request sent")
+	d.CivoClient.ResizeVolume(volId, int(desiredSize))
 
 	// Resizes can take a while, double the number of normal retries
 	available, err := d.waitForVolumeStatus(volume, "available", CivoVolumeAvailableRetries*2)
@@ -387,8 +387,8 @@ func (d *Driver) ControllerExpandVolume(ctx context.Context, req *csi.Controller
 		return nil, status.Error(codes.Internal, "failed to wait for volume to be in an available state")
 	}
 
-	volume, _ = d.CivoClient.GetVolume(volID)
-	log.Info().Int64("size_gb", int64(volume.SizeGigabytes)).Str("volume_id", volID).Msg("Volume succesfully resized")
+	volume, _ = d.CivoClient.GetVolume(volId)
+	log.Info().Int64("size_gb", int64(volume.SizeGigabytes)).Str("volume_id", volId).Msg("Volume succesfully resized")
 	return &csi.ControllerExpandVolumeResponse{
 		CapacityBytes:         int64(volume.SizeGigabytes) * BytesInGigabyte,
 		NodeExpansionRequired: true,
