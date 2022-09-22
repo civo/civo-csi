@@ -2,8 +2,11 @@ module github.com/civo/civo-csi
 
 require (
 	github.com/BurntSushi/toml v0.3.1
-	github.com/civo/civogo v0.3.3
+	github.com/civo/civogo v0.3.13
 	github.com/container-storage-interface/spec v1.6.0
+	github.com/go-openapi/spec v0.19.3 // indirect
+	github.com/google/go-cmp v0.5.7 // indirect
+	github.com/googleapis/gnostic v0.4.1 // indirect
 	github.com/joho/godotenv v1.4.0
 	github.com/kubernetes-csi/csi-test/v4 v4.4.0
 	github.com/onsi/gomega v1.19.0
