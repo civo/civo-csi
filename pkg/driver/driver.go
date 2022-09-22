@@ -59,6 +59,7 @@ func NewDriver(apiURL, apiKey, region, namespace, clusterID string) (*Driver, er
 	}
 
 	userAgent := &civogo.Component{
+		ID:      clusterID,
 		Name:    "civo-csi",
 		Version: Version,
 	}
