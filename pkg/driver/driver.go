@@ -17,6 +17,9 @@ import (
 	"google.golang.org/grpc"
 )
 
+// CSIVersion is the version of the csi to set in the User-Agent header
+var CSIVersion = "dev"
+
 // Name is the name of the driver
 const Name string = "Civo CSI Driver"
 
@@ -44,7 +47,7 @@ type Driver struct {
 }
 
 // NewDriver returns a CSI driver that implements gRPC endpoints for CSI
-func NewDriver(apiURL, apiKey, region, namespace, cluster_id string) (*Driver, error) {
+func NewDriver(apiURL, apiKey, region, namespace, clusterID string) (*Driver, error) {
 	var client *civogo.Client
 	var err error
 
@@ -55,18 +58,26 @@ func NewDriver(apiURL, apiKey, region, namespace, cluster_id string) (*Driver, e
 		}
 	}
 
+	userAgent := &civogo.Component{
+		ID:      clusterID,
+		Name:    "civo-csi",
+		Version: Version,
+	}
+
+	client.SetUserAgent(userAgent)
+
 	socketFilename := os.Getenv("CSI_ENDPOINT")
 	if socketFilename == "" {
 		socketFilename = DefaultSocketFilename
 	}
 
-	log.Info().Str("api_url", apiURL).Str("region", region).Str("namespace", namespace).Str("cluster_id", cluster_id).Str("socketFilename", socketFilename).Msg("Created a new driver")
+	log.Info().Str("api_url", apiURL).Str("region", region).Str("namespace", namespace).Str("cluster_id", clusterID).Str("socketFilename", socketFilename).Str("user_agent", userAgent.Name).Msg("Created a new driver")
 
 	return &Driver{
 		CivoClient:     client,
 		Region:         region,
 		Namespace:      namespace,
-		ClusterID:      cluster_id,
+		ClusterID:      clusterID,
 		DiskHotPlugger: &RealDiskHotPlugger{},
 		controller:     (apiKey != ""),
 		SocketFilename: socketFilename,

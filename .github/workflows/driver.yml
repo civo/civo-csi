@@ -40,6 +40,8 @@ jobs:
         with:
           file: Dockerfile
           push: true
+          build-args: |
+            VERSION=${{ steps.tag.outputs.tag }}
           tags: |
             civo/csi:${{ steps.tag.outputs.tag }}
             civo/csi:latest
