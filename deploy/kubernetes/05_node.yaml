@@ -41,9 +41,6 @@ spec:
             - "--kubelet-registration-path=/var/lib/kubelet/plugins/csi.civo.com/csi.sock"
             - "--health-port=9809"
             - "--timeout=30s"
-          ports:
-            - containerPort: 9809
-              name: healthz  
           livenessProbe:
             httpGet:
               path: /healthz
