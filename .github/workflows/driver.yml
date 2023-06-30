@@ -52,6 +52,8 @@ jobs:
     steps:
       - name: Build and push (Google Container Registry)
         uses: RafikFarhad/push-to-gcr-github-action@v5-beta
+        env:
+          PROJECT_ID: consummate-yew-302509
         with:
           gcloud_service_key: ${{ secrets.GCLOUD_SERVICE_KEY }}
           registry: gcr.io
