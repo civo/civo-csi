@@ -50,6 +50,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: test-suite
     steps:
+      - name: Checkout
+        uses: actions/checkout@v2
       - name: Build and push (Google Container Registry)
         uses: RafikFarhad/push-to-gcr-github-action@v5-beta
         with:
@@ -57,4 +59,5 @@ jobs:
           registry: gcr.io
           project_id: consummate-yew-302509
           image_name: csi
-          image_tag: latest,${{ steps.tag.outputs.tag }}
+          image_tag: latest
+          # image_tag: latest,${{ steps.tag.outputs.tag }}
