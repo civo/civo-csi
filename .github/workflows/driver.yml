@@ -8,7 +8,7 @@ jobs:
   test-suite:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: actions/setup-go@v2
         with:
           go-version: "^1.15"
@@ -22,7 +22,7 @@ jobs:
     needs: test-suite
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Get tag
         id: tag
         uses: dawidd6/action-get-tag@v1
@@ -35,7 +35,7 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      - name: Build and push
+      - name: Build and push (Dockerhub)
         uses: docker/build-push-action@v2
         with:
           file: Dockerfile
@@ -45,3 +45,11 @@ jobs:
           tags: |
             civo/csi:${{ steps.tag.outputs.tag }}
             civo/csi:latest
+      - name: Build and push (Google Container Registry)
+        uses: RafikFarhad/push-to-gcr-github-action@v5-beta
+        with:
+          gcloud_service_key: ${{ secrets.GCLOUD_SERVICE_KEY }}
+          registry: gcr.io
+          project_id: consummate-yew-302509
+          image_name: csi
+          image_tag: latest,${{ steps.tag.outputs.tag }}
