@@ -56,5 +56,5 @@ jobs:
           gcloud_service_key: ${{ secrets.GCLOUD_SERVICE_KEY }}
           registry: gcr.io
           project_id: consummate-yew-302509
-          image_name: civo/csi
+          image_name: csi
           image_tag: latest,${{ steps.tag.outputs.tag }}
