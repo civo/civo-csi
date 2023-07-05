@@ -71,7 +71,7 @@ spec:
             - name: socket-dir
               mountPath: /var/lib/kubelet/plugins/csi.civo.com
         - name: civo-csi-plugin
-          image: civo/csi:latest
+          image: gcr.io/consummate-yew-302509/csi:latest
           env:
             - name: CSI_ENDPOINT
               value: unix:///var/lib/kubelet/plugins/csi.civo.com/csi.sock

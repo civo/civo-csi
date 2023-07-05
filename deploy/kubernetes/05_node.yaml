@@ -68,7 +68,7 @@ spec:
             - name: registration-dir
               mountPath: /registration
         - name: civo-csi-plugin
-          image: civo/csi:latest
+          image: gcr.io/consummate-yew-302509/csi:latest
           env:
             - name: CIVO_API_KEY
               valueFrom:
