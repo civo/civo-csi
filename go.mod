@@ -4,7 +4,7 @@ go 1.22
 
 require (
 	github.com/BurntSushi/toml v0.3.1
-	github.com/civo/civogo v0.3.19
+	github.com/civo/civogo v0.3.67
 	github.com/container-storage-interface/spec v1.6.0
 	github.com/golang/protobuf v1.5.3
 	github.com/joho/godotenv v1.4.0
@@ -49,6 +49,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
+	golang.org/x/mod v0.16.0 // indirect
 	golang.org/x/net v0.9.0 // indirect
 	golang.org/x/oauth2 v0.7.0 // indirect
 	golang.org/x/term v0.7.0 // indirect
@@ -68,5 +69,3 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
-
-replace github.com/civo/civogo => ../civogo
