@@ -86,10 +86,15 @@ func NewDriver(apiURL, apiKey, region, namespace, clusterID string) (*Driver, er
 }
 
 // NewTestDriver returns a new Civo CSI driver specifically setup to call a fake Civo API
-func NewTestDriver() (*Driver, error) {
+func NewTestDriver(fc *civogo.FakeClient) (*Driver, error) {
 	d, err := NewDriver("https://civo-api.example.com", "NO_API_KEY_NEEDED", "TEST1", "default", "12345678")
 	d.SocketFilename = "unix:///tmp/civo-csi.sock"
-	d.CivoClient, _ = civogo.NewFakeClient()
+	if fc != nil {
+		d.CivoClient = fc
+	} else {
+		d.CivoClient, _ = civogo.NewFakeClient()
+	}
+
 	d.DiskHotPlugger = &FakeDiskHotPlugger{}
 	d.TestMode = true // Just stops so much logging out of failures, as they are often expected during the tests
 

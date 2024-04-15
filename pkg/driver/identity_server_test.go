@@ -2,6 +2,7 @@ package driver_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/civo/civo-csi/pkg/driver"
@@ -23,6 +24,7 @@ func TestProbe(t *testing.T) {
 
 func TestProbeUnhealthy(t *testing.T) {
 	fc, _ := civogo.NewFakeClient()
+	fc.PingErr = fmt.Errorf("something went wrong")
 	d, _ := driver.NewTestDriver(fc)
 
 	_, err := d.Probe(context.Background(), &csi.ProbeRequest{})
