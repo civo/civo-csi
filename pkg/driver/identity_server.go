@@ -4,7 +4,10 @@ import (
 	"context"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/rs/zerolog/log"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // GetPluginInfo returns the name and volume of our driver
@@ -43,6 +46,14 @@ func (d *Driver) GetPluginCapabilities(context.Context, *csi.GetPluginCapabiliti
 
 // Probe is a health check for the driver
 func (d *Driver) Probe(context.Context, *csi.ProbeRequest) (*csi.ProbeResponse, error) {
-	// TODO: Not sure how to implement this probe health check the right way - check the Civo API is responsive?
-	return &csi.ProbeResponse{}, nil
+	err := d.CivoClient.Ping()
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "unable to connect to Civo API")
+	}
+
+	return &csi.ProbeResponse{
+		Ready: &wrappers.BoolValue{
+			Value: true,
+		},
+	}, nil
 }
