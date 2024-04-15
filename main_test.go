@@ -18,7 +18,8 @@ func TestCivoCSI(t *testing.T) {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 
-	d, _ := driver.NewTestDriver()
+	fc, _ := civogo.NewFakeClient()
+	d, _ := driver.NewTestDriver(fc)
 
 	ctx, cancel := context.WithCancel(context.Background())
 

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/civo/civo-csi/pkg/driver"
+	"github.com/civo/civogo"
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc/codes"
@@ -14,7 +15,8 @@ import (
 
 func TestNodeStageVolume(t *testing.T) {
 	t.Run("Format and mount the volume to a global mount path", func(t *testing.T) {
-		d, _ := driver.NewTestDriver()
+		fc, _ := civogo.NewFakeClient()
+		d, _ := driver.NewTestDriver(fc)
 
 		_, err := d.NodeStageVolume(context.Background(), &csi.NodeStageVolumeRequest{
 			VolumeId:          "volume-1",
@@ -31,12 +33,14 @@ func TestNodeStageVolume(t *testing.T) {
 		formatted, _ := d.DiskHotPlugger.IsFormatted("")
 		assert.True(t, formatted)
 
-		mounted, _ := d.DiskHotPlugger.IsMounted("")
+		mounted, _ := d.DiskHotPlugger.IsMounted("/mnt/my-target")
 		assert.True(t, mounted)
 	})
 
 	t.Run("Does not format the volume if already formatted", func(t *testing.T) {
-		d, _ := driver.NewTestDriver()
+		fc, _ := civogo.NewFakeClient()
+		d, _ := driver.NewTestDriver(fc)
+
 		hotPlugger := &driver.FakeDiskHotPlugger{
 			Formatted: true,
 		}
@@ -59,7 +63,9 @@ func TestNodeStageVolume(t *testing.T) {
 	})
 
 	t.Run("Returns Not Found gRPC error if the disk isn't plugged in", func(t *testing.T) {
-		d, _ := driver.NewTestDriver()
+		fc, _ := civogo.NewFakeClient()
+		d, _ := driver.NewTestDriver(fc)
+
 		hotPlugger := &driver.FakeDiskHotPlugger{
 			DiskAttachmentMissing: true,
 		}
@@ -82,7 +88,9 @@ func TestNodeStageVolume(t *testing.T) {
 
 func TestNodeUnstageVolume(t *testing.T) {
 	t.Run("Unmount the volume", func(t *testing.T) {
-		d, _ := driver.NewTestDriver()
+		fc, _ := civogo.NewFakeClient()
+		d, _ := driver.NewTestDriver(fc)
+
 		hotPlugger := &driver.FakeDiskHotPlugger{
 			Formatted: true,
 			Mounted:   true,
@@ -95,14 +103,15 @@ func TestNodeUnstageVolume(t *testing.T) {
 		})
 		assert.Nil(t, err)
 
-		mounted, _ := d.DiskHotPlugger.IsMounted("")
+		mounted, _ := d.DiskHotPlugger.IsMounted("/mnt/my-target")
 		assert.False(t, mounted)
 	})
 }
 
 func TestNodePublishVolume(t *testing.T) {
 	t.Run("Bind-mount the volume from the general mount point in to the container", func(t *testing.T) {
-		d, _ := driver.NewTestDriver()
+		d, _ := driver.NewTestDriver(nil)
+
 		hotPlugger := &driver.FakeDiskHotPlugger{}
 		d.DiskHotPlugger = hotPlugger
 
@@ -126,7 +135,9 @@ func TestNodePublishVolume(t *testing.T) {
 
 func TestNodeUnpublishVolume(t *testing.T) {
 	t.Run("Unmount the bind-mount volume", func(t *testing.T) {
-		d, _ := driver.NewTestDriver()
+		fc, _ := civogo.NewFakeClient()
+		d, _ := driver.NewTestDriver(fc)
+
 		hotPlugger := &driver.FakeDiskHotPlugger{
 			Formatted: true,
 			Mounted:   true,
@@ -139,14 +150,15 @@ func TestNodeUnpublishVolume(t *testing.T) {
 		})
 		assert.Nil(t, err)
 
-		mounted, _ := d.DiskHotPlugger.IsMounted("")
+		mounted, _ := d.DiskHotPlugger.IsMounted("/var/lib/kubelet/some-path")
 		assert.False(t, mounted)
 	})
 }
 
 func TestNodeGetInfo(t *testing.T) {
 	t.Run("Find out the instance ID", func(t *testing.T) {
-		d, _ := driver.NewTestDriver()
+		fc, _ := civogo.NewFakeClient()
+		d, _ := driver.NewTestDriver(fc)
 
 		os.Setenv("NODE_ID", "instance-1")
 		os.Setenv("REGION", "TESTING")
@@ -162,7 +174,9 @@ func TestNodeGetInfo(t *testing.T) {
 
 func TestNodeGetVolumeStats(t *testing.T) {
 	t.Run("Format and mount the volume to a global mount path", func(t *testing.T) {
-		d, _ := driver.NewTestDriver()
+		fc, _ := civogo.NewFakeClient()
+		d, _ := driver.NewTestDriver(fc)
+
 		hotPlugger := &driver.FakeDiskHotPlugger{
 			Formatted:  true,
 			Mounted:    true,

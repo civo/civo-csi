@@ -12,7 +12,7 @@ import (
 
 func TestCreateVolume(t *testing.T) {
 	t.Run("Create a default size volume", func(t *testing.T) {
-		d, _ := driver.NewTestDriver()
+		d, _ := driver.NewTestDriver(nil)
 
 		resp, err := d.CreateVolume(context.Background(), &csi.CreateVolumeRequest{
 			Name: "foo",
@@ -34,7 +34,7 @@ func TestCreateVolume(t *testing.T) {
 	})
 
 	t.Run("Disallow block volumes", func(t *testing.T) {
-		d, _ := driver.NewTestDriver()
+		d, _ := driver.NewTestDriver(nil)
 
 		_, err := d.CreateVolume(context.Background(), &csi.CreateVolumeRequest{
 			Name: "foo",
@@ -51,7 +51,7 @@ func TestCreateVolume(t *testing.T) {
 	})
 
 	t.Run("Create a specified size volume", func(t *testing.T) {
-		d, _ := driver.NewTestDriver()
+		d, _ := driver.NewTestDriver(nil)
 
 		_, err := d.CreateVolume(context.Background(), &csi.CreateVolumeRequest{
 			Name: "foo",
@@ -73,10 +73,11 @@ func TestCreateVolume(t *testing.T) {
 	})
 
 	t.Run("Don't create if the volume already exists and just return it", func(t *testing.T) {
-		d, _ := driver.NewTestDriver()
+		d, _ := driver.NewTestDriver(nil)
 
 		volume, err := d.CivoClient.NewVolume(&civogo.VolumeConfig{
-			Name: "foo",
+			Name:          "foo",
+			SizeGigabytes: 10,
 		})
 		assert.Nil(t, err)
 
@@ -101,7 +102,7 @@ func TestCreateVolume(t *testing.T) {
 
 func TestDeleteVolume(t *testing.T) {
 	t.Run("Delete a volume", func(t *testing.T) {
-		d, _ := driver.NewTestDriver()
+		d, _ := driver.NewTestDriver(nil)
 
 		volume, err := d.CivoClient.NewVolume(&civogo.VolumeConfig{
 			Name: "foo",
@@ -120,12 +121,20 @@ func TestDeleteVolume(t *testing.T) {
 
 func TestControllerPublishVolume(t *testing.T) {
 	t.Run("Publish a volume", func(t *testing.T) {
-		d, _ := driver.NewTestDriver()
-
-		instance, err := d.CivoClient.CreateInstance(&civogo.InstanceConfig{
+		fc, _ := civogo.NewFakeClient()
+		instanceID := "i-12345678"
+		fc.Clusters = []civogo.KubernetesCluster{{
+			ID: "12345678",
+			Instances: []civogo.KubernetesInstance{{
+				ID:       instanceID,
+				Hostname: "instance-1",
+			}},
+		}}
+		fc.Instances = []civogo.Instance{{
+			ID:       instanceID,
 			Hostname: "instance-1",
-		})
-		assert.Nil(t, err)
+		}}
+		d, _ := driver.NewTestDriver(fc)
 
 		volume, err := d.CivoClient.NewVolume(&civogo.VolumeConfig{
 			Name: "foo",
@@ -134,19 +143,20 @@ func TestControllerPublishVolume(t *testing.T) {
 
 		_, err = d.ControllerPublishVolume(context.Background(), &csi.ControllerPublishVolumeRequest{
 			VolumeId:         volume.ID,
-			NodeId:           instance.ID,
+			NodeId:           instanceID,
 			VolumeCapability: &csi.VolumeCapability{},
 		})
 		assert.Nil(t, err)
 
 		volumes, _ := d.CivoClient.ListVolumes()
-		assert.Equal(t, instance.ID, volumes[0].InstanceID)
+		assert.Equal(t, instanceID, volumes[0].InstanceID)
 	})
 }
 
 func TestControllerUnpublishVolume(t *testing.T) {
 	t.Run("Unpublish a volume if attached to the correct node", func(t *testing.T) {
-		d, _ := driver.NewTestDriver()
+		fc, _ := civogo.NewFakeClient()
+		d, _ := driver.NewTestDriver(fc)
 
 		volume, err := d.CivoClient.NewVolume(&civogo.VolumeConfig{
 			Name: "foo",
@@ -167,7 +177,8 @@ func TestControllerUnpublishVolume(t *testing.T) {
 	})
 
 	t.Run("Doesn't unpublish a volume if attached to a different node", func(t *testing.T) {
-		d, _ := driver.NewTestDriver()
+		fc, _ := civogo.NewFakeClient()
+		d, _ := driver.NewTestDriver(fc)
 
 		volume, err := d.CivoClient.NewVolume(&civogo.VolumeConfig{
 			Name: "foo",
@@ -190,7 +201,8 @@ func TestControllerUnpublishVolume(t *testing.T) {
 
 func TestListVolumes(t *testing.T) {
 	t.Run("Lists available existing volumes", func(t *testing.T) {
-		d, _ := driver.NewTestDriver()
+		fc, _ := civogo.NewFakeClient()
+		d, _ := driver.NewTestDriver(fc)
 
 		volume, err := d.CivoClient.NewVolume(&civogo.VolumeConfig{
 			Name: "foo",
@@ -209,7 +221,8 @@ func TestListVolumes(t *testing.T) {
 
 func TestGetCapacity(t *testing.T) {
 	t.Run("Has available capacity from usage and limit", func(t *testing.T) {
-		d, _ := driver.NewTestDriver()
+		fc, _ := civogo.NewFakeClient()
+		d, _ := driver.NewTestDriver(fc)
 
 		civoClient, _ := civogo.NewFakeClient()
 		d.CivoClient = civoClient
@@ -228,7 +241,8 @@ func TestGetCapacity(t *testing.T) {
 	})
 
 	t.Run("Has no capacity from usage and limit", func(t *testing.T) {
-		d, _ := driver.NewTestDriver()
+		fc, _ := civogo.NewFakeClient()
+		d, _ := driver.NewTestDriver(fc)
 
 		civoClient, _ := civogo.NewFakeClient()
 		d.CivoClient = civoClient
@@ -247,7 +261,8 @@ func TestGetCapacity(t *testing.T) {
 	})
 
 	t.Run("Has no capacity from volume count limit", func(t *testing.T) {
-		d, _ := driver.NewTestDriver()
+		fc, _ := civogo.NewFakeClient()
+		d, _ := driver.NewTestDriver(fc)
 
 		civoClient, _ := civogo.NewFakeClient()
 		d.CivoClient = civoClient
