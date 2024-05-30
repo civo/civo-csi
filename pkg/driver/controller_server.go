@@ -311,6 +311,12 @@ func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.Control
 	}
 	log.Debug().Str("volume_id", volume.ID).Msg("Volume found for unpublishing in Civo API")
 
+	// If the volume is attached to a different node, we can't unpublish it so return success
+	if volume.InstanceID != req.NodeId {
+		log.Info().Str("volume_id", volume.ID).Str("instance_id", volume.InstanceID).Str("requested_instance_id", req.NodeId).Msg("Volume is not attached to the requested instance")
+		return &csi.ControllerUnpublishVolumeResponse{}, nil
+	}
+
 	// Call the CivoAPI to detach it, if it's attached to this node/instance
 	log.Info().Str("volume_id", volume.ID).Str("current_instance_id", volume.InstanceID).Str("requested_instance_id", req.NodeId).Msg("Volume sucessfully requested to be detached from requested_instance_id and it's currently attached to current_instance_id in the API")
 	if volume.InstanceID == req.NodeId {
