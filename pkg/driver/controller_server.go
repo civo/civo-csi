@@ -257,6 +257,12 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 
 	// Call the CivoAPI to attach it to a node/instance
 	if volume.InstanceID != req.NodeId {
+		// if the volume is not available, we can't attach it, so error out
+		if volume.Status != "available" {
+			log.Error().Str("volume_id", volume.ID).Str("status", volume.Status).Msg("Volume is not available to be attached")
+			return nil, status.Errorf(codes.Unavailable, "Volume is not available to be attached")
+		}
+
 		log.Debug().Str("volume_id", volume.ID).Str("instance_id", req.NodeId).Msg("Attaching volume to instance in Civo API")
 		_, err = d.CivoClient.AttachVolume(req.VolumeId, req.NodeId)
 		if err != nil {
@@ -343,8 +349,9 @@ func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.Control
 		return &csi.ControllerUnpublishVolumeResponse{}, nil
 	}
 
+	// warn if the volume is not available
 	log.Error().Err(err).Msg("Civo Volume did not go back to 'available'")
-	return nil, status.Errorf(codes.Unavailable, "Civo Volume did not go back to 'available'")
+	return &csi.ControllerUnpublishVolumeResponse{}, nil
 }
 
 // ControllerExpandVolume allows for offline expansion of Volumes
