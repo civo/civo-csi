@@ -336,7 +336,7 @@ func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.Control
 	log.Info().Str("volume_id", volume.ID).Msg("Volume sucessfully requested to be detached in Civo API")
 
 	// Fetch new state after 5 seconds
-	time.Sleep(5 * time.Second)
+	time.Sleep(10 * time.Second)
 	volume, err = d.CivoClient.GetVolume(req.VolumeId)
 	if err != nil {
 		log.Error().Err(err).Msg("Unable to find volume for unpublishing in Civo API")
@@ -351,7 +351,7 @@ func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.Control
 
 	// warn if the volume is not available
 	log.Error().Err(err).Msg("Civo Volume did not go back to 'available'")
-	return &csi.ControllerUnpublishVolumeResponse{}, nil
+	return nil, status.Errorf(codes.Unavailable, "Civo Volume did not go back to 'available'")
 }
 
 // ControllerExpandVolume allows for offline expansion of Volumes
