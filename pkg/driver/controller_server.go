@@ -273,8 +273,8 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 	log.Info().Str("volume_id", volume.ID).Str("instance_id", req.NodeId).Msg("Volume successfully requested to be attached in Civo API")
 
 	log.Debug().Str("volume_id", volume.ID).Msg("Waiting for volume to become attached in Civo API")
-	//slep for 25 seconds, the time it takes for the volume to be attached
-	time.Sleep(25 * time.Second)
+
+	time.Sleep(10 * time.Second)
 	// refetch the volume
 	volume, err = d.CivoClient.GetVolume(req.VolumeId)
 	if err != nil {
