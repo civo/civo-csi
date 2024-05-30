@@ -267,10 +267,18 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 	log.Info().Str("volume_id", volume.ID).Str("instance_id", req.NodeId).Msg("Volume successfully requested to be attached in Civo API")
 
 	log.Debug().Str("volume_id", volume.ID).Msg("Waiting for volume to become attached in Civo API")
-	_, err = d.waitForVolumeStatus(volume, "attached", CivoVolumeAvailableRetries)
+	//slep for 5 secons
+	time.Sleep(5 * time.Second)
+	// refetch the volume
+	volume, err = d.CivoClient.GetVolume(req.VolumeId)
 	if err != nil {
-		log.Error().Err(err).Msg("Volume attaching never completed successfully in Civo API")
+		log.Error().Err(err).Msg("Unable to find volume for publishing in Civo API")
 		return nil, err
+	}
+
+	if volume.InstanceID != req.NodeId {
+		log.Error().Str("volume_id", volume.ID).Str("instance_id", req.NodeId).Msg("Volume is not attached to the requested instance")
+		return nil, status.Errorf(codes.Unavailable, "Volume is not attached to the requested instance")
 	}
 
 	log.Debug().Str("volume_id", volume.ID).Msg("Volume successfully attached in Civo API")
@@ -315,12 +323,14 @@ func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.Control
 	}
 	log.Info().Str("volume_id", volume.ID).Msg("Volume sucessfully requested to be detached in Civo API")
 
-	log.Debug().Str("volume_id", volume.ID).Msg("Waiting for volume status to return to available")
-	available, err := d.waitForVolumeStatus(volume, "available", CivoVolumeAvailableRetries)
+	// Fetch new state after 5 seconds
+	time.Sleep(5 * time.Second)
+	volume, err = d.CivoClient.GetVolume(req.VolumeId)
 	if err != nil {
-		log.Error().Err(err).Msg("Volume becoming available again never completed successfully in Civo API")
+		log.Error().Err(err).Msg("Unable to find volume for unpublishing in Civo API")
 		return nil, err
 	}
+	available := volume.Status == "available"
 
 	if available {
 		log.Debug().Str("volume_id", volume.ID).Msg("Volume is now available again")
