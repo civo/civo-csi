@@ -261,32 +261,37 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 		return &csi.ControllerPublishVolumeResponse{}, nil
 	}
 
-	// Check if the volume is attaching to this node
-	if volume.InstanceID == req.NodeId && volume.Status == "attaching" {
-		log.Info().Str("volume_id", volume.ID).Str("instance_id", req.NodeId).Msg("Volume is already attaching to the requested instance")
-		return nil, status.Errorf(codes.Unavailable, "Volume is already attaching to the requested instance")
-	}
-
 	// if the volume is not available, we can't attach it, so error out
-	if volume.Status != "available" {
-		log.Error().Str("volume_id", volume.ID).Str("status", volume.Status).Msg("Volume is not available to be attached")
+	if volume.Status != "available" && volume.InstanceID != req.NodeId {
+		log.Error().
+			Str("volume_id", volume.ID).
+			Str("status", volume.Status).
+			Str("requested_instance_id", req.NodeId).
+			Str("current_instance_id", volume.InstanceID).
+			Msg("Volume is not available to be attached")
 		return nil, status.Errorf(codes.Unavailable, "Volume is not available to be attached")
 	}
 
-	// Call the CivoAPI to attach it to a node/instance
-	log.Debug().
-		Str("volume_id", volume.ID).
-		Str("volume_status", volume.Status).
-		Str("reqested_instance_id", req.NodeId).
-		Msg("Requesting volume to be attached in Civo API")
-	_, err = d.CivoClient.AttachVolume(req.VolumeId, req.NodeId)
-	if err != nil {
-		log.Error().Err(err).Msg("Unable to attach volume in Civo API")
-		return nil, err
+	// Check if the volume is attaching to this node
+	if volume.InstanceID == req.NodeId && volume.Status != "attaching" {
+		// Do nothing, the volume is already attaching
+		log.Debug().Str("volume_id", volume.ID).Str("status", volume.Status).Msg("Volume is already attaching")
+	} else {
+		// Call the CivoAPI to attach it to a node/instance
+		log.Debug().
+			Str("volume_id", volume.ID).
+			Str("volume_status", volume.Status).
+			Str("reqested_instance_id", req.NodeId).
+			Msg("Requesting volume to be attached in Civo API")
+		_, err = d.CivoClient.AttachVolume(req.VolumeId, req.NodeId)
+		if err != nil {
+			log.Error().Err(err).Msg("Unable to attach volume in Civo API")
+			return nil, err
+		}
+		log.Info().Str("volume_id", volume.ID).Str("instance_id", req.NodeId).Msg("Volume successfully requested to be attached in Civo API")
 	}
-	log.Info().Str("volume_id", volume.ID).Str("instance_id", req.NodeId).Msg("Volume successfully requested to be attached in Civo API")
 
-	time.Sleep(10 * time.Second)
+	time.Sleep(5 * time.Second)
 	// refetch the volume
 	log.Info().Str("volume_id", volume.ID).Msg("Fetching volume again to check status after attaching")
 	volume, err = d.CivoClient.GetVolume(req.VolumeId)
@@ -343,22 +348,24 @@ func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.Control
 		return &csi.ControllerUnpublishVolumeResponse{}, nil
 	}
 
-	// The volume is either attached to the requested node or the requested node is empty
-	// and the volume is attached, so we need to detach the volume
-	log.Info().
-		Str("volume_id", volume.ID).
-		Str("current_instance_id", volume.InstanceID).
-		Str("requested_instance_id", req.NodeId).
-		Str("status", volume.Status).
-		Msg("Requesting volume to be detached")
+	if volume.Status != "detaching" {
+		// The volume is either attached to the requested node or the requested node is empty
+		// and the volume is attached, so we need to detach the volume
+		log.Info().
+			Str("volume_id", volume.ID).
+			Str("current_instance_id", volume.InstanceID).
+			Str("requested_instance_id", req.NodeId).
+			Str("status", volume.Status).
+			Msg("Requesting volume to be detached")
 
-	_, err = d.CivoClient.DetachVolume(req.VolumeId)
-	if err != nil {
-		log.Error().Err(err).Msg("Unable to detach volume in Civo API")
-		return nil, err
+		_, err = d.CivoClient.DetachVolume(req.VolumeId)
+		if err != nil {
+			log.Error().Err(err).Msg("Unable to detach volume in Civo API")
+			return nil, err
+		}
+
+		log.Info().Str("volume_id", volume.ID).Msg("Volume sucessfully requested to be detached in Civo API")
 	}
-
-	log.Info().Str("volume_id", volume.ID).Msg("Volume sucessfully requested to be detached in Civo API")
 
 	// Fetch the new state after 5 seconds
 	time.Sleep(5 * time.Second)
