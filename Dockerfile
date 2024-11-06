@@ -17,7 +17,7 @@ RUN go mod verify
 RUN find .
 
 # Build the binary.
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s -X github.com/civo/civo-csi/driver.CSIVersion=${VERSION}" -o /app/civo-csi
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s -X github.com/civo/civo-csi/pkg/driver.Version=${VERSION}" -o /app/civo-csi
 
 
 ############################

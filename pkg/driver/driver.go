@@ -17,14 +17,11 @@ import (
 	"google.golang.org/grpc"
 )
 
-// CSIVersion is the version of the csi to set in the User-Agent header
-var CSIVersion = "dev"
-
 // Name is the name of the driver
 const Name string = "Civo CSI Driver"
 
-// Version is the current release of the driver
-const Version string = "0.0.1"
+// Version is the current version of the driver to set in the User-Agent header
+var Version string = "0.0.1"
 
 // DefaultVolumeSizeGB is the default size in Gigabytes of an unspecified volume
 const DefaultVolumeSizeGB int = 10

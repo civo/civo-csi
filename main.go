@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"os"
 	"os/signal"
 	"strings"
@@ -13,9 +14,19 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+var (
+	versionInfo = flag.Bool("version", false, "Print the driver version")
+)
+
 func main() {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+
+	flag.Parse()
+	if *versionInfo {
+		log.Info().Str("version", driver.Version).Msg("CSI driver")
+		return
+	}
 
 	apiURL := strings.TrimSpace(os.Getenv("CIVO_API_URL"))
 	apiKey := strings.TrimSpace(os.Getenv("CIVO_API_KEY"))
