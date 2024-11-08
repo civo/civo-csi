@@ -19,9 +19,9 @@ const BytesInGigabyte int64 = 1024 * 1024 * 1024
 // CivoVolumeAvailableRetries is the number of times we will retry to check if a volume is available
 const CivoVolumeAvailableRetries int = 20
 
-var supportedAccessModes = []csi.VolumeCapability_AccessMode_Mode{
-	csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
-	csi.VolumeCapability_AccessMode_SINGLE_NODE_READER_ONLY,
+var supportedAccessModes = map[csi.VolumeCapability_AccessMode_Mode]struct{}{
+	csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER:      struct{}{},
+	csi.VolumeCapability_AccessMode_SINGLE_NODE_READER_ONLY: struct{}{},
 }
 
 // CreateVolume is the first step when a PVC tries to create a dynamic volume
@@ -40,17 +40,9 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 
 	// Check capabilities
 	for _, cap := range req.VolumeCapabilities {
-		modeSupported := false
-		for _, mode := range supportedAccessModes {
-			if cap.GetAccessMode().GetMode() == mode {
-				modeSupported = true
-			}
-		}
-
-		if !modeSupported {
+		if _, ok := supportedAccessModes[cap.GetAccessMode().GetMode()]; !ok {
 			return nil, status.Error(codes.InvalidArgument, "CreateVolume access mode isn't supported")
 		}
-
 		if _, ok := cap.GetAccessType().(*csi.VolumeCapability_Block); ok {
 			return nil, status.Error(codes.InvalidArgument, "CreateVolume block types aren't supported, only mount types")
 		}
@@ -474,10 +466,9 @@ func (d *Driver) ValidateVolumeCapabilities(ctx context.Context, req *csi.Valida
 
 	accessModeSupported := false
 	for _, cap := range req.VolumeCapabilities {
-		for _, m := range supportedAccessModes {
-			if m == cap.AccessMode.Mode {
-				accessModeSupported = true
-			}
+		if _, ok := supportedAccessModes[cap.GetAccessMode().GetMode()]; ok {
+			accessModeSupported = true
+			break
 		}
 	}
 
