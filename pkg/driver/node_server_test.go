@@ -3,6 +3,7 @@ package driver_test
 import (
 	"context"
 	"os"
+	"path"
 	"testing"
 
 	"github.com/civo/civo-csi/pkg/driver"
@@ -115,10 +116,12 @@ func TestNodePublishVolume(t *testing.T) {
 		hotPlugger := &driver.FakeDiskHotPlugger{}
 		d.DiskHotPlugger = hotPlugger
 
+		targetPath := path.Join(t.TempDir(), "some-path")
+
 		_, err := d.NodePublishVolume(context.Background(), &csi.NodePublishVolumeRequest{
 			VolumeId:          "volume-1",
 			StagingTargetPath: "/mnt/my-target",
-			TargetPath:        "/var/lib/kubelet/some-path",
+			TargetPath:        targetPath,
 			VolumeCapability: &csi.VolumeCapability{
 				AccessType: &csi.VolumeCapability_Mount{},
 				AccessMode: &csi.VolumeCapability_AccessMode{
@@ -128,7 +131,7 @@ func TestNodePublishVolume(t *testing.T) {
 		})
 		assert.Nil(t, err)
 
-		mounted, _ := d.DiskHotPlugger.IsMounted("")
+		mounted, _ := d.DiskHotPlugger.IsMounted(targetPath)
 		assert.True(t, mounted)
 	})
 }
@@ -144,13 +147,15 @@ func TestNodeUnpublishVolume(t *testing.T) {
 		}
 		d.DiskHotPlugger = hotPlugger
 
+		targetPath := path.Join(t.TempDir(), "some-path")
+
 		_, err := d.NodeUnpublishVolume(context.Background(), &csi.NodeUnpublishVolumeRequest{
 			VolumeId:   "volume-1",
-			TargetPath: "/var/lib/kubelet/some-path",
+			TargetPath: targetPath,
 		})
 		assert.Nil(t, err)
 
-		mounted, _ := d.DiskHotPlugger.IsMounted("/var/lib/kubelet/some-path")
+		mounted, _ := d.DiskHotPlugger.IsMounted(targetPath)
 		assert.False(t, mounted)
 	})
 }
