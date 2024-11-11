@@ -107,7 +107,7 @@ func TestMain(m *testing.M) {
 	}
 
 	controller.Spec.Template.Spec.Containers[3].Image = Image
-	e2eTest.tenantClient.Update(context.TODO(), controller)
+	err = e2eTest.tenantClient.Update(context.TODO(), controller)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -120,7 +120,7 @@ func TestMain(m *testing.M) {
 		log.Panic(err)
 	}
 
-	e2eTest.tenantClient.Update(context.TODO(), csiDS)
+	err = e2eTest.tenantClient.Update(context.TODO(), csiDS)
 	if err != nil {
 		log.Panic(err)
 	}
