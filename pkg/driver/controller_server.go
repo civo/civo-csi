@@ -600,14 +600,12 @@ func (d *Driver) ListSnapshots(context.Context, *csi.ListSnapshotsRequest) (*csi
 }
 
 func getVolSizeInBytes(capRange *csi.CapacityRange) (int64, error) {
-	var bytes int64
-
 	if capRange == nil {
 		return int64(DefaultVolumeSizeGB) * BytesInGigabyte, nil
 	}
 
 	// Volumes can be of a flexible size, but they must specify one of the fields, so we'll use that
-	bytes = capRange.GetRequiredBytes()
+	bytes := capRange.GetRequiredBytes()
 	if bytes == 0 {
 		bytes = capRange.GetLimitBytes()
 	}
