@@ -165,6 +165,7 @@ func (p *RealDiskHotPlugger) Unmount(mountpoint string) error {
 	output, err := exec.Command("umount", mountpoint).CombinedOutput()
 	log.Debug().Str("output", string(output)).Msg("Unmounting command output")
 	if err != nil {
+		log.Error().Err(err).Str("mountpoint", mountpoint).Msg("Failed to unmount")
 		return fmt.Errorf("unmounting with 'umount %s' failed: %v output: %s", mountpoint, err, string(output))
 	}
 

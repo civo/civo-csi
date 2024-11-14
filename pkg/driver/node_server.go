@@ -21,12 +21,15 @@ func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRe
 	log.Info().Str("volume_id", req.VolumeId).Str("staging_target_path", req.StagingTargetPath).Msg("Request: NodeStageVolume")
 
 	if req.VolumeId == "" {
+		log.Error().Msg("must provide a VolumeId to NodeStageVolume")
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to NodeStageVolume")
 	}
 	if req.StagingTargetPath == "" {
+		log.Error().Msg("must provide a StagingTargetPath to NodeStageVolume")
 		return nil, status.Error(codes.InvalidArgument, "must provide a StagingTargetPath to NodeStageVolume")
 	}
 	if req.VolumeCapability == nil {
+		log.Error().Msg("must provide a VolumeCapability to NodeStageVolume")
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeCapability to NodeStageVolume")
 	}
 
@@ -43,6 +46,7 @@ func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRe
 	// Format the volume if not already formatted
 	formatted, err := d.DiskHotPlugger.IsFormatted(attachedDiskPath)
 	if err != nil {
+		log.Error().Str("path", attachedDiskPath).Err(err).Msg("Formatted check errored")
 		return nil, err
 	}
 	log.Debug().Str("volume_id", req.VolumeId).Bool("formatted", formatted).Msg("Is currently formatted?")
@@ -54,6 +58,7 @@ func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRe
 	// Mount the volume if not already mounted
 	mounted, err := d.DiskHotPlugger.IsMounted(d.DiskHotPlugger.PathForVolume(req.VolumeId))
 	if err != nil {
+		log.Error().Str("path", attachedDiskPath).Err(err).Msg("Mounted check errored")
 		return nil, err
 	}
 	log.Debug().Str("volume_id", req.VolumeId).Bool("mounted", formatted).Msg("Is currently mounted?")
@@ -75,9 +80,11 @@ func (d *Driver) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolu
 	log.Info().Str("volume_id", req.VolumeId).Str("staging_target_path", req.StagingTargetPath).Msg("Request: NodeUnstageVolume")
 
 	if req.VolumeId == "" {
+		log.Error().Msg("must provide a VolumeId to NodeUnstageVolume")
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to NodeUnstageVolume")
 	}
 	if req.StagingTargetPath == "" {
+		log.Error().Msg("must provide a StagingTargetPath to NodeUnstageVolume")
 		return nil, status.Error(codes.InvalidArgument, "must provide a StagingTargetPath to NodeUnstageVolume")
 	}
 
@@ -85,6 +92,7 @@ func (d *Driver) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolu
 	path := d.DiskHotPlugger.PathForVolume(req.VolumeId)
 
 	if path == "" && !d.TestMode {
+		log.Error().Str("volume_id", req.VolumeId).Msg("path to volume (/dev/disk/by-id/VOLUME_ID) not found")
 		return &csi.NodeUnstageVolumeResponse{}, nil
 	}
 
@@ -108,15 +116,19 @@ func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolu
 	log.Info().Str("volume_id", req.VolumeId).Str("staging_target_path", req.StagingTargetPath).Str("target_path", req.TargetPath).Msg("Request: NodePublishVolume")
 
 	if req.VolumeId == "" {
+		log.Error().Msg("must provide a VolumeId to NodePublishVolume")
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to NodePublishVolume")
 	}
 	if req.StagingTargetPath == "" {
+		log.Error().Msg("must provide a StagingTargetPath to NodePublishVolume")
 		return nil, status.Error(codes.InvalidArgument, "must provide a StagingTargetPath to NodePublishVolume")
 	}
 	if req.TargetPath == "" {
+		log.Error().Msg("must provide a TargetPath to NodePublishVolume")
 		return nil, status.Error(codes.InvalidArgument, "must provide a TargetPath to NodePublishVolume")
 	}
 	if req.VolumeCapability == nil {
+		log.Error().Msg("must provide a VolumeCapability to NodePublishVolume")
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeCapability to NodePublishVolume")
 	}
 
@@ -124,6 +136,7 @@ func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolu
 
 	err := os.MkdirAll(req.TargetPath, 0o750)
 	if err != nil {
+		log.Error().Str("volume_id", req.VolumeId).Str("targetPath", req.TargetPath).Err(err).Msg("Failed to create target path")
 		return nil, err
 	}
 
@@ -131,6 +144,7 @@ func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolu
 	// Mount the volume if not already mounted
 	mounted, err := d.DiskHotPlugger.IsMounted(req.TargetPath)
 	if err != nil {
+		log.Error().Str("path", req.TargetPath).Err(err).Msg("Mounted check errored")
 		return nil, err
 	}
 	log.Debug().Str("volume_id", req.VolumeId).Bool("mounted", mounted).Msg("Checking if currently mounting")
@@ -153,9 +167,11 @@ func (d *Driver) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublish
 	log.Info().Str("volume_id", req.VolumeId).Str("target_path", req.TargetPath).Msg("Request: NodeUnpublishVolume")
 
 	if req.VolumeId == "" {
+		log.Error().Msg("must provide a VolumeId to NodeUnpublishVolume")
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to NodeUnpublishVolume")
 	}
 	if req.TargetPath == "" {
+		log.Error().Msg("must provide a TargetPath to NodeUnpublishVolume")
 		return nil, status.Error(codes.InvalidArgument, "must provide a TargetPath to NodeUnpublishVolume")
 	}
 
@@ -179,6 +195,7 @@ func (d *Driver) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublish
 
 	if !mounted {
 		if err = os.RemoveAll(targetPath); err != nil {
+			log.Error().Str("targetPath", targetPath).Err(err).Msg("Failed to remove target path")
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 
@@ -187,12 +204,14 @@ func (d *Driver) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublish
 
 	err = d.DiskHotPlugger.Unmount(targetPath)
 	if err != nil {
+		log.Error().Str("targetPath", targetPath).Err(err).Msg("Failed to unmount target path")
 		return nil, err
 	}
 
 	log.Info().Str("volume_id", req.VolumeId).Str("target_path", targetPath).Msg("Removing target path")
 	err = os.Remove(targetPath)
 	if err != nil && !os.IsNotExist(err) {
+		log.Error().Str("targetPath", targetPath).Err(err).Msg("Failed to remove target path")
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
@@ -205,6 +224,7 @@ func (d *Driver) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoRequest) (
 
 	nodeInstanceID, region, err := d.currentNodeDetails()
 	if err != nil {
+		log.Error().Err(err).Msg("Failed to get current node details")
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
@@ -228,25 +248,30 @@ func (d *Driver) NodeGetVolumeStats(ctx context.Context, req *csi.NodeGetVolumeS
 	log.Info().Str("volume_id", req.VolumeId).Msg("Request: NodeGetVolumeStats")
 
 	if req.VolumeId == "" {
+		log.Error().Msg("must provide a VolumeId to NodeGetVolumeStats")
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to NodeGetVolumeStats")
 	}
 
 	volumePath := req.VolumePath
 	if volumePath == "" {
+		log.Error().Msg("must provide a VolumePath to NodeGetVolumeStats")
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumePath to NodeGetVolumeStats")
 	}
 
 	mounted, err := d.DiskHotPlugger.IsMounted(volumePath)
 	if err != nil {
+		log.Error().Str("volume_id", req.VolumeId).Str("path", volumePath).Err(err).Msg("Failed to check if volume path is mounted")
 		return nil, status.Errorf(codes.Internal, "failed to check if volume path %q is mounted: %s", volumePath, err)
 	}
 
 	if !mounted {
+		log.Error().Str("volume_id", req.VolumeId).Str("path", volumePath).Msg("Volume path is not mounted")
 		return nil, status.Errorf(codes.NotFound, "volume path %q is not mounted", volumePath)
 	}
 
 	stats, err := d.DiskHotPlugger.GetStatistics(volumePath)
 	if err != nil {
+		log.Error().Str("volume_id", req.VolumeId).Str("path", volumePath).Err(err).Msg("Failed to retrieve capacity statistics")
 		return nil, status.Errorf(codes.Internal, "failed to retrieve capacity statistics for volume path %q: %s", volumePath, err)
 	}
 
@@ -276,14 +301,17 @@ func (d *Driver) NodeGetVolumeStats(ctx context.Context, req *csi.NodeGetVolumeS
 func (d *Driver) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandVolumeRequest) (*csi.NodeExpandVolumeResponse, error) {
 	log.Info().Str("volume_id", req.VolumeId).Str("target_path", req.VolumePath).Msg("Request: NodeExpandVolume")
 	if req.VolumeId == "" {
+		log.Error().Msg("must provide a VolumeId to NodeExpandVolume")
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to NodeExpandVolume")
 	}
 	if req.VolumePath == "" {
+		log.Error().Msg("must provide a VolumePath to NodeExpandVolume")
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumePath to NodeExpandVolume")
 	}
 
 	_, err := d.CivoClient.GetVolume(req.VolumeId)
 	if err != nil {
+		log.Error().Str("volume_id", req.VolumeId).Err(err).Msg("Failed to find VolumeID to NodeExpandVolume")
 		return nil, status.Error(codes.NotFound, "unable to fund VolumeID to NodeExpandVolume")
 
 	}
@@ -298,6 +326,7 @@ func (d *Driver) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandVolume
 	log.Info().Str("volume_id", req.VolumeId).Str("path", attachedDiskPath).Msg("Expanding Volume")
 	err = d.DiskHotPlugger.ExpandFilesystem(d.DiskHotPlugger.PathForVolume(req.VolumeId))
 	if err != nil {
+		log.Error().Str("volume_id", req.VolumeId).Err(err).Msg("Failed to expand filesystem")
 		return nil, status.Error(codes.Internal, fmt.Sprintf("failed to expand file system: %s", err.Error()))
 	}
 
