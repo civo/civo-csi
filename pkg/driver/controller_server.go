@@ -182,28 +182,54 @@ func (d *Driver) waitForVolumeStatus(vol *civogo.Volume, desiredStatus string, r
 	return false, fmt.Errorf("volume isn't %s, state is currently %s", desiredStatus, v.Status)
 }
 
+func (d *Driver) waitForVolumeDeletion(volID string, retries int) (bool, error) {
+	log.Info().Str("volume_id", volID).Msg("Waiting for volume deletion")
+	if d.TestMode {
+		return true, nil
+	}
+
+	for i := 0; i < retries; i++ {
+		time.Sleep(5 * time.Second)
+		_, err := d.CivoClient.GetVolume(volID)
+		if err != nil {
+			if strings.Contains(err.Error(), "DatabaseVolumeNotFoundError") || strings.Contains(err.Error(), "ZeroMatchesError") {
+				log.Info().Str("volume_id", volID).Msg("Volume already deleted from Civo API")
+				return true, nil
+			}
+			return false, err
+		}
+	}
+	return false, fmt.Errorf("volume %s isn't deleted", volID)
+}
+
 // DeleteVolume is used once a volume is unused and therefore unmounted, to stop the resources being used and subsequent billing
 func (d *Driver) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest) (*csi.DeleteVolumeResponse, error) {
-	log.Info().Str("volume_id", req.VolumeId).Msg("Request: DeleteVolume")
+	log.Info().Str("volume_id", req.GetVolumeId()).Msg("Request: DeleteVolume")
 
 	if req.VolumeId == "" {
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to DeleteVolume")
 	}
 
 	log.Debug().Msg("Deleting volume in Civo API")
-	_, err := d.CivoClient.DeleteVolume(req.VolumeId)
+	_, err := d.CivoClient.DeleteVolume(req.GetVolumeId())
 	if err != nil {
 		if strings.Contains(err.Error(), "DatabaseVolumeNotFoundError") {
-			log.Info().Str("volume_id", req.VolumeId).Msg("Volume already deleted from Civo API")
+			log.Info().Str("volume_id", req.GetVolumeId()).Msg("Volume already deleted from Civo API")
 			return &csi.DeleteVolumeResponse{}, nil
 		}
-
 		log.Error().Err(err).Msg("Unable to delete volume in Civo API")
 		return nil, err
 	}
 
+	ok, err := d.waitForVolumeDeletion(req.GetVolumeId(), CivoVolumeAvailableRetries*2)
+	if err != nil {
+		log.Error().Err(err).Msg("Unable to wait for volume deletion in Civo API")
+		return nil, err
+	}
+	if !ok {
+		return nil, status.Errorf(codes.Internal, "failed to wait for volume deletion: %s", req.GetVolumeId())
+	}
 	log.Info().Str("volume_id", req.VolumeId).Msg("Volume deleted from Civo API")
-
 	return &csi.DeleteVolumeResponse{}, nil
 }
 
