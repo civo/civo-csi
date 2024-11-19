@@ -195,7 +195,7 @@ func (d *Driver) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublish
 	if !mounted {
 		if err = os.RemoveAll(targetPath); err != nil {
 			log.Error().Str("targetPath", targetPath).Err(err).Msg("Failed to remove target path")
-			return nil, status.Errorf(codes.Internal, "failed to remove target path: %q: %s", targetPath, err)
+			return nil, status.Errorf(codes.Internal, "failed to remove target path %q: %s", targetPath, err)
 		}
 
 		return &csi.NodeUnpublishVolumeResponse{}, nil
