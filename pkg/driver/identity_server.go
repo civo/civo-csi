@@ -48,7 +48,7 @@ func (d *Driver) GetPluginCapabilities(context.Context, *csi.GetPluginCapabiliti
 func (d *Driver) Probe(context.Context, *csi.ProbeRequest) (*csi.ProbeResponse, error) {
 	err := d.CivoClient.Ping()
 	if err != nil {
-		return nil, status.Error(codes.Unavailable, "unable to connect to Civo API")
+		return nil, status.Errorf(codes.Unavailable, "unable to connect to Civo API: %s", err)
 	}
 
 	return &csi.ProbeResponse{
