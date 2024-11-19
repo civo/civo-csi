@@ -38,9 +38,8 @@ func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRe
 	// Find the disk attachment location
 	attachedDiskPath := d.DiskHotPlugger.PathForVolume(req.VolumeId)
 	if attachedDiskPath == "" {
-		err := status.Error(codes.NotFound, "path to volume (/dev/disk/by-id/VOLUME_ID) not found")
-		log.Error().Str("volume_id", req.VolumeId).Err(err)
-		return nil, err
+		log.Error().Str("volume_id", req.VolumeId).Msg("path to volume (/dev/disk/by-id/VOLUME_ID) not found")
+		return nil, status.Errorf(codes.NotFound, "path to volume (/dev/disk/by-id/%s) not found", req.VolumeId)
 	}
 
 	// Format the volume if not already formatted
@@ -196,7 +195,7 @@ func (d *Driver) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublish
 	if !mounted {
 		if err = os.RemoveAll(targetPath); err != nil {
 			log.Error().Str("targetPath", targetPath).Err(err).Msg("Failed to remove target path")
-			return nil, status.Error(codes.Internal, err.Error())
+			return nil, status.Errorf(codes.Internal, "failed to remove target path %q: %s", targetPath, err)
 		}
 
 		return &csi.NodeUnpublishVolumeResponse{}, nil
@@ -212,7 +211,7 @@ func (d *Driver) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublish
 	err = os.Remove(targetPath)
 	if err != nil && !os.IsNotExist(err) {
 		log.Error().Str("targetPath", targetPath).Err(err).Msg("Failed to remove target path")
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, status.Errorf(codes.Internal, "failed to remove target path %q: %s", targetPath, err)
 	}
 
 	return &csi.NodeUnpublishVolumeResponse{}, nil
@@ -225,7 +224,7 @@ func (d *Driver) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoRequest) (
 	nodeInstanceID, region, err := d.currentNodeDetails()
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get current node details")
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, status.Errorf(codes.Internal, "failed to get current node details: %s", err)
 	}
 
 	log.Debug().Str("node_id", nodeInstanceID).Str("region", region).Msg("Requested information about node")
@@ -312,22 +311,20 @@ func (d *Driver) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandVolume
 	_, err := d.CivoClient.GetVolume(req.VolumeId)
 	if err != nil {
 		log.Error().Str("volume_id", req.VolumeId).Err(err).Msg("Failed to find VolumeID to NodeExpandVolume")
-		return nil, status.Error(codes.NotFound, "unable to fund VolumeID to NodeExpandVolume")
-
+		return nil, status.Errorf(codes.NotFound, "unable to find VolumeID %q to NodeExpandVolume: %s", req.VolumeId, err)
 	}
 	// Find the disk attachment location
 	attachedDiskPath := d.DiskHotPlugger.PathForVolume(req.VolumeId)
 	if attachedDiskPath == "" {
-		err := status.Error(codes.NotFound, "path to volume (/dev/disk/by-id/VOLUME_ID) not found")
-		log.Error().Str("volume_id", req.VolumeId).Err(err)
-		return nil, err
+		log.Error().Str("volume_id", req.VolumeId).Msg("path to volume (/dev/disk/by-id/VOLUME_ID) not found")
+		return nil, status.Errorf(codes.NotFound, "path to volume (/dev/disk/by-id/%s) not found", req.VolumeId)
 	}
 
 	log.Info().Str("volume_id", req.VolumeId).Str("path", attachedDiskPath).Msg("Expanding Volume")
 	err = d.DiskHotPlugger.ExpandFilesystem(d.DiskHotPlugger.PathForVolume(req.VolumeId))
 	if err != nil {
 		log.Error().Str("volume_id", req.VolumeId).Err(err).Msg("Failed to expand filesystem")
-		return nil, status.Error(codes.Internal, fmt.Sprintf("failed to expand file system: %s", err.Error()))
+		return nil, status.Errorf(codes.Internal, "failed to expand file system: %s", err)
 	}
 
 	// TODO: Get new size for resposne

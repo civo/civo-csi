@@ -20,8 +20,8 @@ const BytesInGigabyte int64 = 1024 * 1024 * 1024
 const CivoVolumeAvailableRetries int = 20
 
 var supportedAccessModes = map[csi.VolumeCapability_AccessMode_Mode]struct{}{
-	csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER:      struct{}{},
-	csi.VolumeCapability_AccessMode_SINGLE_NODE_READER_ONLY: struct{}{},
+	csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER:      {},
+	csi.VolumeCapability_AccessMode_SINGLE_NODE_READER_ONLY: {},
 }
 
 // CreateVolume is the first step when a PVC tries to create a dynamic volume
@@ -105,10 +105,10 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 	availableSize := int64(quota.DiskGigabytesLimit - quota.DiskGigabytesUsage)
 	if availableSize < desiredSize {
 		log.Error().Msg("Requested volume would exceed storage quota available")
-		return nil, status.Error(codes.OutOfRange, fmt.Sprintf("Requested volume would exceed volume space quota by %d GB", desiredSize-availableSize))
+		return nil, status.Errorf(codes.OutOfRange, "Requested volume would exceed volume space quota by %d GB", desiredSize-availableSize)
 	} else if quota.DiskVolumeCountUsage >= quota.DiskVolumeCountLimit {
 		log.Error().Msg("Requested volume would exceed volume quota available")
-		return nil, status.Error(codes.OutOfRange, fmt.Sprintf("Requested volume would exceed volume count limit quota of %d", quota.DiskVolumeCountLimit))
+		return nil, status.Errorf(codes.OutOfRange, "Requested volume would exceed volume count limit quota of %d", quota.DiskVolumeCountLimit)
 	}
 
 	log.Debug().Int("disk_gb_limit", quota.DiskGigabytesLimit).Int("disk_gb_usage", quota.DiskGigabytesUsage).Msg("Quota has sufficient capacity remaining")
@@ -152,7 +152,7 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 	}
 
 	log.Error().Err(err).Msg("Civo Volume is not 'available'")
-	return nil, status.Errorf(codes.Unavailable, "Civo Volume is not 'available'")
+	return nil, status.Errorf(codes.Unavailable, "Civo Volume %q is not \"available\", state currently is %q", volume.ID, volume.Status)
 }
 
 // waitForVolumeAvailable will just sleep/loop waiting for Civo's API to report it's available, or hit a defined
@@ -226,7 +226,7 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 	log.Debug().Msg("Check if Node exits")
 	cluster, err := d.CivoClient.GetKubernetesCluster(d.ClusterID)
 	if err != nil {
-		return nil, status.Error(codes.Internal, fmt.Sprintf("unable to connect to Civo Api. error: %s", err.Error()))
+		return nil, status.Errorf(codes.Internal, "unable to connect to Civo Api. error: %s", err)
 	}
 	found := false
 	for _, instance := range cluster.Instances {
@@ -261,7 +261,7 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 			Str("requested_instance_id", req.NodeId).
 			Str("current_instance_id", volume.InstanceID).
 			Msg("Volume is not available to be attached")
-		return nil, status.Errorf(codes.Unavailable, "Volume is not available to be attached")
+		return nil, status.Errorf(codes.Unavailable, "Volume %q is not available to be attached, state is currently %q", volume.ID, volume.Status)
 	}
 
 	// Check if the volume is attaching to this node
@@ -293,12 +293,12 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 	}
 	if volume.Status != "attached" {
 		log.Error().Str("volume_id", volume.ID).Str("status", volume.Status).Msg("Volume is not in the attached state")
-		return nil, status.Errorf(codes.Unavailable, "Volume is not attached to the requested instance")
+		return nil, status.Errorf(codes.Unavailable, "Volume %q is not attached to the requested instance, state is currently %q", volume.ID, volume.Status)
 	}
 
 	if volume.InstanceID != req.NodeId {
 		log.Error().Str("volume_id", volume.ID).Str("instance_id", req.NodeId).Msg("Volume is not attached to the requested instance")
-		return nil, status.Errorf(codes.Unavailable, "Volume is not attached to the requested instance")
+		return nil, status.Errorf(codes.Unavailable, "Volume %q is not attached to the requested instance %q, instance id is currently %q", volume.ID, req.NodeId, volume.InstanceID)
 	}
 
 	log.Debug().Str("volume_id", volume.ID).Msg("Volume successfully attached in Civo API")
@@ -374,7 +374,7 @@ func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.Control
 
 	// err that the the volume is not available
 	log.Error().Msg("Civo Volume did not go back to 'available' status")
-	return nil, status.Errorf(codes.Unavailable, "Civo Volume did not go back to 'available'")
+	return nil, status.Errorf(codes.Unavailable, "Civo Volume %q did not go back to \"available\", state is currently %q", req.VolumeId, volume.Status)
 }
 
 // ControllerExpandVolume allows for offline expansion of Volumes
@@ -461,7 +461,7 @@ func (d *Driver) ValidateVolumeCapabilities(ctx context.Context, req *csi.Valida
 
 	_, err := d.CivoClient.GetVolume(req.VolumeId)
 	if err != nil {
-		return nil, status.Error(codes.NotFound, "Unable to fetch volume from Civo API")
+		return nil, status.Errorf(codes.NotFound, "Unable to fetch volume from Civo API: %s", err)
 	}
 
 	accessModeSupported := false
