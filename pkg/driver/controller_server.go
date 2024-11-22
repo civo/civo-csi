@@ -561,6 +561,8 @@ func (d *Driver) ControllerGetCapabilities(context.Context, *csi.ControllerGetCa
 		csi.ControllerServiceCapability_RPC_LIST_VOLUMES,
 		csi.ControllerServiceCapability_RPC_GET_CAPACITY,
 		csi.ControllerServiceCapability_RPC_EXPAND_VOLUME,
+		csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT,
+		csi.ControllerServiceCapability_RPC_LIST_SNAPSHOTS,
 	}
 
 	var csc []*csi.ControllerServiceCapability
@@ -585,8 +587,75 @@ func (d *Driver) ControllerGetCapabilities(context.Context, *csi.ControllerGetCa
 }
 
 // CreateSnapshot is part of implementing Snapshot & Restore functionality, but we don't support that
-func (d *Driver) CreateSnapshot(context.Context, *csi.CreateSnapshotRequest) (*csi.CreateSnapshotResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "")
+func (d *Driver) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequest) (*csi.CreateSnapshotResponse, error) {
+	// return nil, status.Error(codes.Unimplemented, "")
+	log.Info().Msg("Request: CreateSnapshot")
+
+	if len(req.GetName()) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "Snapshot name is required")
+	}
+	// Check arguments
+	if len(req.GetSourceVolumeId()) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "SourceVolumeId is required")
+	}
+
+	// Check for an existing snapshot with the specified name. 
+	// If a snapshot is found, compare its volume ID with the requested volume ID 
+	// and the source volume ID of the requested snapshot to ensure they match.
+	log.Debug().Msg("Listing current snapshots in Civo API")
+
+	// Todo: FindSnapshot implementation in civogo is pending
+	if exSnapshot, err := d.CivoClient.FindSnapshot(req.GetName()); err == nil{
+		// Since err is nil, it indicates that a snapshot with the same name already exists. 
+		// We need to verify if the sourceVolumeID of the existing snapshot matches the sourceVolumeID in the new request.
+		if exSnapshot.VolID == req.GetSourceVolumeId() {
+			// same snapshot has been created.
+			return &csi.CreateSnapshotResponse{
+				Snapshot: &csi.Snapshot{
+					SnapshotId:     exSnapshot.Id,
+					SourceVolumeId: exSnapshot.VolID,
+					CreationTime:   exSnapshot.CreationTime,
+					SizeBytes:      exSnapshot.SizeBytes,
+					ReadyToUse:     exSnapshot.ReadyToUse,
+				},
+			}, nil
+		}
+		return nil, status.Errorf(codes.AlreadyExists, "snapshot with the same name: %s but with different SourceVolumeId already exist", req.GetName())
+	}
+	
+
+	// Todo: SnapshotConfig is yet to be defined in civogo
+	snapConfig := &civogo.SnapshotConfig{
+		Name:          req.Name,
+		VolID:         req.SourceVolumeId,
+	}
+
+	log.Debug().Msgf("create volume snapshot %s in Civo API", req.GetName())
+
+	// Todo: createSnapshotFromVolume yet to be implemented in civogo
+	result, err := d.CivoClient.createSnapshotFromVolume(snapConfig)
+	if err != nil {
+		log.Error().Err(err).Msg("Unable to create snapshot in Civo API")
+		return nil, err
+	}
+
+	log.Info().Str("snapshot_id", result.ID).Msg("Snapshot created in Civo API")
+
+	snapshot, err := d.CivoClient.GetSnapshot(result.ID)
+	if err != nil {
+		log.Error().Err(err).Msg("Error fetching snapshot updates from Civo API")
+		return nil, err
+	}
+
+	return &csi.CreateSnapshotResponse{
+		Snapshot: &csi.Snapshot{
+			SnapshotId:     snapshot.Id,
+			SourceVolumeId: snapshot.VolID,
+			CreationTime:   snapshot.CreationTime,
+			SizeBytes:      snapshot.SizeBytes,
+			ReadyToUse:     snapshot.ReadyToUse,
+		},
+	}, nil	
 }
 
 // DeleteSnapshot is part of implementing Snapshot & Restore functionality, but we don't support that
