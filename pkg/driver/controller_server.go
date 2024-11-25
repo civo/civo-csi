@@ -561,7 +561,7 @@ func (d *Driver) ControllerGetCapabilities(context.Context, *csi.ControllerGetCa
 		csi.ControllerServiceCapability_RPC_LIST_VOLUMES,
 		csi.ControllerServiceCapability_RPC_GET_CAPACITY,
 		csi.ControllerServiceCapability_RPC_EXPAND_VOLUME,
-		csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT,
+		// csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT, TODO: Uncomment after client implementation is complete.
 	}
 
 	var csc []*csi.ControllerServiceCapability
@@ -605,6 +605,7 @@ func (d *Driver) DeleteSnapshot(ctx context.Context, req *csi.DeleteSnapshotRequ
 		Str("snapshot_id", snapshotID).
 		Msg("Deleting snapshot in Civo API")
 
+	// TODO: Uncomment after client implementation is complete.
 	// _, err := d.CivoClient.DeleteVolumeSnapshot(snapshotID)
 	// if err != nil {
 	// 	if strings.Contains(err.Error(), "DatabaseVolumeSnapshotNotFoundError") {
