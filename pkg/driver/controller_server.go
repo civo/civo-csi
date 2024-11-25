@@ -596,10 +596,10 @@ func (d *Driver) DeleteSnapshot(ctx context.Context, req *csi.DeleteSnapshotRequ
 		Str("snapshot_id", req.GetSnapshotId()).
 		Msg("Request: DeleteSnapshot")
 
-	if req.GetSnapshotId() == "" {
+	snapshotID := req.GetSnapshotId()
+	if snapshotID == "" {
 		return nil, status.Error(codes.InvalidArgument, "must provide SnapshotId to DeleteSnapshot")
 	}
-	snapshotID := req.GetSnapshotId()
 
 	log.Debug().
 		Str("snapshot_id", snapshotID).
