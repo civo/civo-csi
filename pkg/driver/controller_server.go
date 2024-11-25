@@ -561,6 +561,7 @@ func (d *Driver) ControllerGetCapabilities(context.Context, *csi.ControllerGetCa
 		csi.ControllerServiceCapability_RPC_LIST_VOLUMES,
 		csi.ControllerServiceCapability_RPC_GET_CAPACITY,
 		csi.ControllerServiceCapability_RPC_EXPAND_VOLUME,
+		csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT,
 	}
 
 	var csc []*csi.ControllerServiceCapability
@@ -590,7 +591,21 @@ func (d *Driver) CreateSnapshot(context.Context, *csi.CreateSnapshotRequest) (*c
 }
 
 // DeleteSnapshot is part of implementing Snapshot & Restore functionality, but we don't support that
-func (d *Driver) DeleteSnapshot(context.Context, *csi.DeleteSnapshotRequest) (*csi.DeleteSnapshotResponse, error) {
+func (d *Driver) DeleteSnapshot(ctx context.Context, req *csi.DeleteSnapshotRequest) (*csi.DeleteSnapshotResponse, error) {
+	log.Info().
+		Str("snapshot_id", req.GetSnapshotId()).
+		Msg("Request: DeleteSnapshot")
+
+	if req.GetSnapshotId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "must provide SnapshotId to DeleteSnapshot")
+	}
+
+	log.Debug().
+		Str("snapshot_id", req.GetSnapshotId()).
+		Msg("Deleting snapshot in Civo API")
+
+	// TODO
+
 	return nil, status.Error(codes.Unimplemented, "")
 }
 
