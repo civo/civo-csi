@@ -45,9 +45,9 @@ jobs:
           file: Dockerfile
           push: true
           build-args: |
-            VERSION=${{ steps.get_pr_info.outputs.PR_NUM }}
+            VERSION=${{ steps.pr_info.outputs.PR_NUM }}
           tags: |
-            civo/csi:${{ steps.get_pr_info.outputs.PR_NUM }}
+            civo/csi:${{ steps.pr_info.outputs.PR_NUM }}
   release-build:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
