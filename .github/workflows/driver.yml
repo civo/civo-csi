@@ -16,7 +16,39 @@ jobs:
         run: go test ./...
       - name: Run vetting/linting checks
         run: go vet ./...
-  build:
+  pr-build:
+    runs-on: ubuntu-latest
+    if: "${{ github.event.pull_request.number != ''}}"
+    needs: test-suite
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Get PR infomation
+        id: pr_info
+        run: |
+          echo "PR_NUM=pr-${{ github.event.pull_request.number }}" | tee -a $GITHUB_OUTPUT
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+      - name: Debug
+        run: |
+          echo "${{ steps.pr_info.outputs.PR_NUM }}"
+      - name: Build and push (Dockerhub)
+        uses: docker/build-push-action@v2
+        with:
+          file: Dockerfile
+          push: true
+          build-args: |
+            VERSION=${{ steps.pr_info.outputs.PR_NUM }}
+          tags: |
+            civo/csi:${{ steps.pr_info.outputs.PR_NUM }}
+  release-build:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     needs: test-suite
