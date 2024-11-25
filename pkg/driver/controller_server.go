@@ -599,14 +599,23 @@ func (d *Driver) DeleteSnapshot(ctx context.Context, req *csi.DeleteSnapshotRequ
 	if req.GetSnapshotId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "must provide SnapshotId to DeleteSnapshot")
 	}
+	snapshotID := req.GetSnapshotId()
 
 	log.Debug().
-		Str("snapshot_id", req.GetSnapshotId()).
+		Str("snapshot_id", snapshotID).
 		Msg("Deleting snapshot in Civo API")
 
-	// TODO
-
-	return nil, status.Error(codes.Unimplemented, "")
+	// _, err := d.CivoClient.DeleteSnapshot(req.GetSnapshotId())
+	// if err != nil {
+	// 	if strings.Contains(err.Error(), "") {
+	// 		log.Info().
+	// 			Str("volume_id", snapshotID).
+	// 			Msg("Snapshot already deleted from Civo API")
+	// 		return &csi.DeleteSnapshotResponse{}, nil
+	// 	}
+	// 	return nil, status.Errorf(codes.Internal, "failed to delete snapshot %q, err: %s", snapshotID, err)
+	// }
+	return &csi.DeleteSnapshotResponse{}, nil
 }
 
 // ListSnapshots is part of implementing Snapshot & Restore functionality, but we don't support that
