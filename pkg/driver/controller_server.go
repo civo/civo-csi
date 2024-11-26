@@ -590,7 +590,7 @@ func (d *Driver) CreateSnapshot(context.Context, *csi.CreateSnapshotRequest) (*c
 	return nil, status.Error(codes.Unimplemented, "")
 }
 
-// DeleteSnapshot is part of implementing Snapshot & Restore functionality, but we don't support that
+// DeleteSnapshot is part of implementing Snapshot & Restore functionality, and it will be supported in the future.
 func (d *Driver) DeleteSnapshot(ctx context.Context, req *csi.DeleteSnapshotRequest) (*csi.DeleteSnapshotResponse, error) {
 	log.Info().
 		Str("snapshot_id", req.GetSnapshotId()).
@@ -613,6 +613,8 @@ func (d *Driver) DeleteSnapshot(ctx context.Context, req *csi.DeleteSnapshotRequ
 	// 			Str("volume_id", snapshotID).
 	// 			Msg("Snapshot already deleted from Civo API")
 	// 		return &csi.DeleteSnapshotResponse{}, nil
+	// 	} else if strings.Contains(err.Error(), "DatabaseSnapshotCannotDeleteInUseError") {
+	// 		return nil, status.Errorf(codes.FailedPrecondition, "failed to delete snapshot %q, it is currently in use, err: %s", snapshotID, err)
 	// 	}
 	// 	return nil, status.Errorf(codes.Internal, "failed to delete snapshot %q, err: %s", snapshotID, err)
 	// }
