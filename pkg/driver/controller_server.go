@@ -561,6 +561,7 @@ func (d *Driver) ControllerGetCapabilities(context.Context, *csi.ControllerGetCa
 		csi.ControllerServiceCapability_RPC_LIST_VOLUMES,
 		csi.ControllerServiceCapability_RPC_GET_CAPACITY,
 		csi.ControllerServiceCapability_RPC_EXPAND_VOLUME,
+		// csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT, TODO: Uncomment after client implementation is complete.
 	}
 
 	var csc []*csi.ControllerServiceCapability
@@ -589,8 +590,35 @@ func (d *Driver) CreateSnapshot(context.Context, *csi.CreateSnapshotRequest) (*c
 	return nil, status.Error(codes.Unimplemented, "")
 }
 
-// DeleteSnapshot is part of implementing Snapshot & Restore functionality, but we don't support that
-func (d *Driver) DeleteSnapshot(context.Context, *csi.DeleteSnapshotRequest) (*csi.DeleteSnapshotResponse, error) {
+// DeleteSnapshot is part of implementing Snapshot & Restore functionality, and it will be supported in the future.
+func (d *Driver) DeleteSnapshot(ctx context.Context, req *csi.DeleteSnapshotRequest) (*csi.DeleteSnapshotResponse, error) {
+	log.Info().
+		Str("snapshot_id", req.GetSnapshotId()).
+		Msg("Request: DeleteSnapshot")
+
+	snapshotID := req.GetSnapshotId()
+	if snapshotID == "" {
+		return nil, status.Error(codes.InvalidArgument, "must provide SnapshotId to DeleteSnapshot")
+	}
+
+	log.Debug().
+		Str("snapshot_id", snapshotID).
+		Msg("Deleting snapshot in Civo API")
+
+	// TODO: Uncomment after client implementation is complete.
+	// _, err := d.CivoClient.DeleteVolumeSnapshot(snapshotID)
+	// if err != nil {
+	// 	if strings.Contains(err.Error(), "DatabaseVolumeSnapshotNotFoundError") {
+	// 		log.Info().
+	// 			Str("volume_id", snapshotID).
+	// 			Msg("Snapshot already deleted from Civo API")
+	// 		return &csi.DeleteSnapshotResponse{}, nil
+	// 	} else if strings.Contains(err.Error(), "DatabaseSnapshotCannotDeleteInUseError") {
+	// 		return nil, status.Errorf(codes.FailedPrecondition, "failed to delete snapshot %q, it is currently in use, err: %s", snapshotID, err)
+	// 	}
+	// 	return nil, status.Errorf(codes.Internal, "failed to delete snapshot %q, err: %s", snapshotID, err)
+	// }
+	// return &csi.DeleteSnapshotResponse{}, nil
 	return nil, status.Error(codes.Unimplemented, "")
 }
 
