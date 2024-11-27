@@ -3,7 +3,7 @@ package driver
 import (
 	"context"
 	"fmt"
-	"sort"
+	// "sort"
 	"strings"
 	"time"
 
@@ -595,84 +595,85 @@ func (d *Driver) DeleteSnapshot(context.Context, *csi.DeleteSnapshotRequest) (*c
 	return nil, status.Error(codes.Unimplemented, "")
 }
 
-// ListSnapshots is part of implementing Snapshot & Restore functionality
+// ListSnapshots is part of Snapshot & Restore functionality, which fetches a list of existing snapshots
 func (d *Driver) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsRequest) (*csi.ListSnapshotsResponse, error) {
-    log.Info().Msg("Request: ListSnapshots")
+	log.Info().Msg("Request: ListSnapshots")
 
-    snapshotID := req.GetSnapshotId()
-    sourceVolumeID := req.GetSourceVolumeId()
-    
+	snapshotID := req.GetSnapshotId()
+	sourceVolumeID := req.GetSourceVolumeId()
 
-    if req.GetStartingToken() != "" {
-        log.Error().Msgf("Pagination not supported")
-        return nil, status.Errorf(codes.Aborted, "%v not supported", "starting-token")
-    }
+	if req.GetStartingToken() != "" {
+		log.Error().Msgf("Pagination not supported")
+		return nil, status.Errorf(codes.Aborted, "%v not supported", "starting-token")
+	}
 
+	// case 1: SnapshotId is not empty, return snapshots that match the snapshot id
+	if len(snapshotID) != 0 {
+		log.Debug().Msgf("Fetching snapshot with ID %v", snapshotID)
 
-    // case 1: SnapshotId is not empty, return snapshots that match the snapshot id
-    if len(snapshotID) != 0 {
-        log.Debug().Msgf("Fetching snapshot with ID %v", snapshotID)
+		// Retrieve a specific snapshot by ID
+		// Todo: GetSnapshot to be implemented in civogo
+		// Todo: Un-comment post client implementation
+		// snapshot, err := d.CivoClient.GetSnapshot(snapshotID)
+		// if err != nil {
+		// 	log.Error().Err(err).Msgf("No snapshot found matching the ID %v", snapshotID)
+		// 	if strings.Contains(err.Error(), "DatabaseSnapshotNotFoundError") {
+		// 		return &csi.ListSnapshotsResponse{}, nil
+		// 	}
+		// 	return nil, status.Errorf(codes.Internal, "failed to list snapshot %v: %v", snapshotID, err)
+		// }
+		// return &csi.ListSnapshotsResponse{
+		//     Entries: []*csi.ListSnapshotsResponse_Entry{convertSnapshot(snapshot)},
+		// }, nil
+	}
 
-        // Retrieve a specific snapshot by ID
-        // Todo: GetSnapshot to be implemented in civogo
-        snapshot, err := d.CivoClient.GetSnapshot(snapshotID)
-        if err != nil{
-            log.Error().Err(err).Msgf("Failed to get snapshot with ID %v", snapshotID)
-            return nil, status.Errorf(codes.Internal, "failed to list snapshot %v: %v", snapshotID, err)
-        }
-        return &csi.ListSnapshotsResponse{
-            Entries: []*csi.ListSnapshotsResponse_Entry{convertSnapshot(snapshot)},
-        }, nil
-        
-    }
+	// case 2: Retrieve snapshots by source volume ID
+	if len(sourceVolumeID) != 0 {
+		log.Debug().Msgf("Fetching snapshots for volume ID %v", sourceVolumeID)
 
+		// snapshots, err := d.CivoClient.ListSnapshots()  // Todo: ListSnapshots to be implemented in civogo
+		// if err != nil{
+		//     log.Error().Err(err).Msgf("Failed to list snapshots for volume %v", sourceVolumeID)
+		//     return nil, status.Errorf(codes.Internal, "failed to list snapshots for volume %v: %v", sourceVolumeID, err)
+		// }
 
-    // case 2: Retrieve snapshots by source volume ID
-    if len(sourceVolumeID) != 0 {
-        log.Debug().Msgf("Fetching snapshots for volume ID %v", sourceVolumeID)
-        
-        snapshots, err := d.CivoClient.ListSnapshots()  // Todo: ListSnapshots to be implemented in civogo
-        if err != nil{
-            log.Error().Err(err).Msgf("Failed to list snapshots for volume %v", sourceVolumeID)
-            return nil, status.Errorf(codes.Internal, "failed to list snapshots for volume %v: %v", sourceVolumeID, err)
-        }
+		// entries := []*csi.ListSnapshotsResponse_Entry{}
+		// for _, snapshot := range snapshots {
+		//     if snapshot.VolID == sourceVolumeID {
+		//         entries = append(entries, convertSnapshot(snapshot))
+		//     }
+		// }
 
-        entries := []*csi.ListSnapshotsResponse_Entry{}
-        for _, snapshot := range snapshots { 
-            if snapshot.VolID == sourceVolumeID {
-                entries = append(entries, convertSnapshot(snapshot))
-            }
-        }
-    
-        return &csi.ListSnapshotsResponse{
-            Entries: entries,
-        }, nil
-    }
+		// return &csi.ListSnapshotsResponse{
+		//     Entries: entries,
+		// }, nil
+	}
 
-    log.Debug().Msg("Fetching all snapshots")
-    
-    // case 3: Retrieve all snapshots if no filters are provided
-    snapshots, err := d.CivoClient.ListSnapshots()  // Todo: ListSnapshots to be implemented in civogo
-    if err != nil{
-        log.Error().Err(err).Msg("Failed to list snapshots from Civo API")
-        return nil, status.Errorf(codes.Internal, "failed to list snapshots from Civo API %v", err)
-    }
+	log.Debug().Msg("Fetching all snapshots")
 
-    sort.Slice(snapshots, func(i, j int) bool {
-        return snapshots[i].Id < snapshots[j].Id
-    })
+	// case 3: Retrieve all snapshots if no filters are provided
+	// Todo: un-comment post client(civogo) implementation
+	// snapshots, err := d.CivoClient.ListSnapshots()  // Todo: ListSnapshots to be implemented in civogo
+	// if err != nil{
+	//     log.Error().Err(err).Msg("Failed to list snapshots from Civo API")
+	//     return nil, status.Errorf(codes.Internal, "failed to list snapshots from Civo API %v", err)
+	// }
 
-    entries := []*csi.ListSnapshotsResponse_Entry{}
-    for _, snap := range snapshots {
-        entries = append(entries, convertSnapshot(snap))
-    }
+	// sort.Slice(snapshots, func(i, j int) bool {
+	//     return snapshots[i].Id < snapshots[j].Id
+	// })
 
-	log.Info().Msgf("Successfully listed snapshots. Total snapshots: %d", len(entries))
+	// entries := []*csi.ListSnapshotsResponse_Entry{}
+	// for _, snap := range snapshots {
+	//     entries = append(entries, convertSnapshot(snap))
+	// }
 
+	// log.Info().Msgf("Successfully listed snapshots. Total snapshots: %d", len(entries))
 
-    return &csi.ListSnapshotsResponse{
-        Entries:   entries,
-    }, nil
+	// return &csi.ListSnapshotsResponse{
+	//     Entries:   entries,
+	// }, nil
+	return nil, status.Error(codes.Unimplemented, "")
 }
 
 func getVolSizeInBytes(capRange *csi.CapacityRange) (int64, error) {
@@ -689,15 +690,16 @@ func getVolSizeInBytes(capRange *csi.CapacityRange) (int64, error) {
 	return bytes, nil
 }
 
+// Todo: Un-comment post client implementation is complete
 // Todo: Snapshot to be defined in civogo
-func convertSnapshot(snap civogo.Snapshot) *csi.ListSnapshotsResponse_Entry {
-    return &csi.ListSnapshotsResponse_Entry{
-        Snapshot: &csi.Snapshot{
-            SnapshotId:     snap.Id,
-            SourceVolumeId: snap.VolID,
-            CreationTime:   snap.CreationTime,
-            SizeBytes:      snap.SizeBytes,
-            ReadyToUse:     snap.ReadyToUse,
-        },
-    }
-}
+// func convertSnapshot(snap *civogo.Snapshot) *csi.ListSnapshotsResponse_Entry {
+//     return &csi.ListSnapshotsResponse_Entry{
+//         Snapshot: &csi.Snapshot{
+//             SnapshotId:     snap.Id,
+//             SourceVolumeId: snap.VolID,
+//             CreationTime:   snap.CreationTime,
+//             SizeBytes:      snap.SizeBytes,
+//             ReadyToUse:     snap.ReadyToUse,
+//         },
+//     }
+// }
