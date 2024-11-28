@@ -15,4 +15,5 @@ resources:
 
 images:
   - name: registry.k8s.io/sig-storage/snapshot-controller:v7.0.1
+    newName: k8s.gcr.io/sig-storage/snapshot-controller
     newTag: v8.0.1
