@@ -12,3 +12,7 @@ resources:
 
   # For VolumeSnapshotClass
   - volume_snapshot_class.yaml
+
+images:
+  - name: registry.k8s.io/sig-storage/snapshot-controller:v7.0.1
+    newTag: v8.0.1
