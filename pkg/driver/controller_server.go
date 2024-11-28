@@ -719,6 +719,7 @@ func getVolSizeInBytes(capRange *csi.CapacityRange) (int64, error) {
 
 // Todo: Un-comment post client implementation is complete
 // Todo: Snapshot to be defined in civogo
+// convertSnapshot function converts a civogo.Snapshot object(API response) into a CSI ListSnapshotsResponse_Entry
 // func convertSnapshot(snap *civogo.Snapshot) *csi.ListSnapshotsResponse_Entry {
 //     return &csi.ListSnapshotsResponse_Entry{
 //         Snapshot: &csi.Snapshot{
