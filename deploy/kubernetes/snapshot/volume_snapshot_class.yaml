@@ -1,0 +1,8 @@
+# Usage of the v1 API implies that the cluster must have
+# external-snapshotter v4.x installed.↴
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata:
+  name: civo-volume-snapshot
+driver: csi.civo.com
+deletionPolicy: Delete
