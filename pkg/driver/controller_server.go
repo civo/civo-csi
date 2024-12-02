@@ -630,24 +630,34 @@ func (d *Driver) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsReques
 	sourceVolumeID := req.GetSourceVolumeId()
 
 	if req.GetStartingToken() != "" {
-		log.Error().Msgf("Pagination not supported")
-		return nil, status.Errorf(codes.Aborted, "%v not supported", "starting-token")
+		log.Error().Msg("ListSnapshots RPC received a Starting token, but pagination is not supported. Ensure the request does not include a starting token.")
+		return nil, status.Error(codes.Aborted, "starting-token not supported") 
 	}
 
 	// case 1: SnapshotId is not empty, return snapshots that match the snapshot id
 	if len(snapshotID) != 0 {
-		log.Debug().Msgf("Fetching snapshot with ID %v", snapshotID)
+		log.Debug().
+			Str("snapshot_id", snapshotID).
+			Msg("Fetching snapshot")
 
 		// Retrieve a specific snapshot by ID
 		// Todo: GetSnapshot to be implemented in civogo
 		// Todo: Un-comment post client implementation
 		// snapshot, err := d.CivoClient.GetSnapshot(snapshotID)
 		// if err != nil {
-		// 	log.Error().Err(err).Msgf("No snapshot found matching the ID %v", snapshotID)
-		// 	if strings.Contains(err.Error(), "DatabaseSnapshotNotFoundError") {
-		// 		return &csi.ListSnapshotsResponse{}, nil
-		// 	}
-		// 	return nil, status.Errorf(codes.Internal, "failed to list snapshot %v: %v", snapshotID, err)
+		// Todo: DatabaseSnapshotNotFoundError & DiskSnapshotNotFoundError are placeholders, it's still not clear what error will be returned by API (awaiting implementation - WIP)
+		// if strings.Contains(err.Error(), "DatabaseSnapshotNotFoundError") || 
+		// 	strings.Contains(err.Error(), "DiskSnapshotNotFoundError") {
+		// 	log.Info().
+		// 		Str("snapshot_id", snapshotID).
+		// 		Msg("ListSnapshots: no snapshot found, returning with success")
+		// 	return &csi.ListSnapshotsResponse{}, nil
+		// }
+		// 	log.Error().  
+		// 		Err(err).
+        // 		Str("snapshot_id", snapshotID).  
+        // 		Msg("Failed to list snapshot from Civo API") 
+		// 	return nil, status.Errorf(codes.Internal, "failed to list snapshot %q: %v", snapshotID, err)
 		// }
 		// return &csi.ListSnapshotsResponse{
 		//     Entries: []*csi.ListSnapshotsResponse_Entry{convertSnapshot(snapshot)},
@@ -660,8 +670,11 @@ func (d *Driver) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsReques
 
 		// snapshots, err := d.CivoClient.ListSnapshots()  // Todo: ListSnapshots to be implemented in civogo
 		// if err != nil{
-		//     log.Error().Err(err).Msgf("Failed to list snapshots for volume %v", sourceVolumeID)
-		//     return nil, status.Errorf(codes.Internal, "failed to list snapshots for volume %v: %v", sourceVolumeID, err)
+		// 	log.Error().
+		// 		Err(err).
+		// 		Str("source_volume_id", sourceVolumeID).
+		// 		Msg("Failed to list snapshots for volume")
+		//     return nil, status.Errorf(codes.Internal, "failed to list snapshots for volume %q: %v", sourceVolumeID, err)
 		// }
 
 		// entries := []*csi.ListSnapshotsResponse_Entry{}
@@ -683,7 +696,7 @@ func (d *Driver) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsReques
 	// snapshots, err := d.CivoClient.ListSnapshots()  // Todo: ListSnapshots to be implemented in civogo
 	// if err != nil{
 	//     log.Error().Err(err).Msg("Failed to list snapshots from Civo API")
-	//     return nil, status.Errorf(codes.Internal, "failed to list snapshots from Civo API %v", err)
+	//     return nil, status.Errorf(codes.Internal, "failed to list snapshots from Civo API: %v", err)
 	// }
 
 	// sort.Slice(snapshots, func(i, j int) bool {
