@@ -76,7 +76,6 @@ spec:
             - "--v=5"
             - "--csi-address=$(ADDRESS)"
             - "--timeout=30s"
-            - "--retry-interval-max=10"
           env:
             - name: ADDRESS
               value: /var/lib/kubelet/plugins/csi.civo.com/csi.sock
