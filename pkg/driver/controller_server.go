@@ -630,7 +630,8 @@ func (d *Driver) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsReques
 	sourceVolumeID := req.GetSourceVolumeId()
 
 	if req.GetStartingToken() != "" {
-		log.Error().Msg("ListSnapshots RPC received a Starting token, but pagination is not supported. Ensure the request does not include a starting token.")
+		log.Error().
+		Msg("ListSnapshots RPC received a Starting token, but pagination is not supported. Ensure the request does not include a starting token.")
 		return nil, status.Error(codes.Aborted, "starting-token not supported") 
 	}
 
@@ -666,7 +667,10 @@ func (d *Driver) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsReques
 
 	// case 2: Retrieve snapshots by source volume ID
 	if len(sourceVolumeID) != 0 {
-		log.Debug().Msgf("Fetching snapshots for volume ID %v", sourceVolumeID)
+		log.Debug().
+			Str("operation", "list_snapshots").
+			Str("source_volume_id", sourceVolumeID).
+			Msg("Fetching volume snapshots")
 
 		// snapshots, err := d.CivoClient.ListSnapshots()  // Todo: ListSnapshots to be implemented in civogo
 		// if err != nil{
@@ -708,7 +712,9 @@ func (d *Driver) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsReques
 	//     entries = append(entries, convertSnapshot(snap))
 	// }
 
-	// log.Info().Msgf("Successfully listed snapshots. Total snapshots: %d", len(entries))
+	// log.Info().
+	// 	Int("total_snapshots", len(entries)).
+	// 	Msg("Snapshots listed successfully")
 
 	// return &csi.ListSnapshotsResponse{
 	//     Entries:   entries,
