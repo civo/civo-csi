@@ -1,0 +1,6 @@
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata:
+  name: civo-volume-snapshot
+driver: csi.civo.com
+deletionPolicy: Delete
