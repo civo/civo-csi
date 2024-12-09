@@ -629,7 +629,7 @@ func (d *Driver) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequ
 	// 			Str("requested_source_volume_id", sourceVolID).
 	// 			Str("actual_source_volume_id", snapshot.VolID).
 	// 			Err(err).
-	// 			Msg("Already exists snapshot with the same name but with different SourceVolumeId already exist")
+	// 			Msg("Snapshot with the same name but with different SourceVolumeId already exist")
 	// 		return nil, status.Errorf(codes.AlreadyExists, "snapshot with the same name %q but with different SourceVolumeId already exist", snapshotName)
 	// 	}
 	// 	return &csi.CreateSnapshotResponse{
