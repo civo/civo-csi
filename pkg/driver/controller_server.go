@@ -653,6 +653,10 @@ func (d *Driver) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequ
 	// 	VolID: req.SourceVolumeId,
 	// })
 	// if err != nil {
+	// 	if strings.Contains(err.Error(), "DatabaseVolumeSnapshotLimitExceededError") {
+	// 		log.Error().Err(err).Msg("Requested volume snapshot would exceed volume quota available")
+	// 		return nil, status.Errorf(codes.ResourceExhausted, "failed to create volume snapshot due to over quota: %s", err)
+	// 	}
 	// 	log.Error().Err(err).Msg("Unable to create snapshot in Civo API")
 	// 	return nil, status.Errorf(codes.Internal, "failed to create volume snapshot: %s", err)
 	// }
