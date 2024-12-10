@@ -94,6 +94,20 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 			return nil, status.Errorf(codes.Unavailable, "Volume isn't available to be attached, state is currently %s", v.Status)
 		}
 	}
+
+	// TODO: Uncomment after client implementation is complete.
+	// snapshotID := ""
+	// if volSource := req.GetVolumeContentSource(); volSource != nil {
+	// 	if _, ok := volSource.GetType().(*csi.VolumeContentSource_Snapshot); !ok {
+	// 		return nil, status.Error(codes.InvalidArgument, "Unsupported volumeContentSource type")
+	// 	}
+	// 	snapshot := volSource.GetSnapshot()
+	// 	if snapshot == nil {
+	// 		return nil, status.Error(codes.InvalidArgument, "failed to get snapshot from the volumeContentSource")
+	// 	}
+	// 	snapshotID = snapshot.GetSnapshotId()
+	// }
+
 	log.Debug().Msg("Volume doesn't currently exist, will need creating")
 
 	log.Debug().Msg("Requesting available capacity in client's quota from the Civo API")
@@ -119,6 +133,7 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 		Namespace:     d.Namespace,
 		ClusterID:     d.ClusterID,
 		SizeGigabytes: int(desiredSize),
+		// SnapshotID: snapshotID, // TODO: Uncomment after client implementation is complete.
 	}
 	log.Debug().Msg("Creating volume in Civo API")
 	result, err := d.CivoClient.NewVolume(v)
@@ -631,8 +646,8 @@ func (d *Driver) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsReques
 
 	if req.GetStartingToken() != "" {
 		log.Error().
-		Msg("ListSnapshots RPC received a Starting token, but pagination is not supported. Ensure the request does not include a starting token.")
-		return nil, status.Error(codes.Aborted, "starting-token not supported") 
+			Msg("ListSnapshots RPC received a Starting token, but pagination is not supported. Ensure the request does not include a starting token.")
+		return nil, status.Error(codes.Aborted, "starting-token not supported")
 	}
 
 	// case 1: SnapshotId is not empty, return snapshots that match the snapshot id
@@ -647,17 +662,17 @@ func (d *Driver) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsReques
 		// snapshot, err := d.CivoClient.GetSnapshot(snapshotID)
 		// if err != nil {
 		// Todo: DatabaseSnapshotNotFoundError & DiskSnapshotNotFoundError are placeholders, it's still not clear what error will be returned by API (awaiting implementation - WIP)
-		// if strings.Contains(err.Error(), "DatabaseSnapshotNotFoundError") || 
+		// if strings.Contains(err.Error(), "DatabaseSnapshotNotFoundError") ||
 		// 	strings.Contains(err.Error(), "DiskSnapshotNotFoundError") {
 		// 	log.Info().
 		// 		Str("snapshot_id", snapshotID).
 		// 		Msg("ListSnapshots: no snapshot found, returning with success")
 		// 	return &csi.ListSnapshotsResponse{}, nil
 		// }
-		// 	log.Error().  
+		// 	log.Error().
 		// 		Err(err).
-        // 		Str("snapshot_id", snapshotID).  
-        // 		Msg("Failed to list snapshot from Civo API") 
+		// 		Str("snapshot_id", snapshotID).
+		// 		Msg("Failed to list snapshot from Civo API")
 		// 	return nil, status.Errorf(codes.Internal, "failed to list snapshot %q: %v", snapshotID, err)
 		// }
 		// return &csi.ListSnapshotsResponse{
