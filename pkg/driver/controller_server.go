@@ -607,40 +607,41 @@ func (d *Driver) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequ
 	// sourceVolID := req.GetSourceVolumeId()
 	//
 	// log.Debug().
-	// 	Str("snapshot_name", snapshotName).
+	// 	Str("source_volume_id", sourceVolID).
 	// 	Msg("Finding current snapshot in Civo API")
 	//
-	// // Check for an existing snapshot with the specified name.
-	// // If a snapshot is found, compare its volume ID with the requested volume ID
-	// // and the source volume ID of the requested snapshot to ensure they match.
-	// snapshot, err := d.CivoClient.FindSnapshot(snapshotName)
-	// if err != nil && !strings.Contains(err.Error(), "DatabaseVolumeSnapshotNotFoundError") {
+	// snapshots, err := d.CivoClient.ListVolumeSnapshotsByVolumeID(sourceVolID)
+	// if err != nil {
 	// 	log.Error().
-	// 		Str("snapshot_name", snapshotName).
+	// 		Str("source_volume_id", sourceVolID).
 	// 		Err(err).
-	// 		Msg("Unable to get snapshot in Civo API")
-	// 	return nil, status.Errorf(codes.Internal, "failed to get snapshot by %q: %s", snapshotName, err)
+	// 		Msg("Unable to list snapshot in Civo API")
+	// 	return nil, status.Errorf(codes.Internal, "failed to list snapshots by %q: %s", sourceVolID, err)
 	// }
 	//
-	// if snapshot != nil {
-	// 	if snapshot.VolID != sourceVolID {
-	// 		log.Error().
-	// 			Str("snapshot_name", snapshotName).
-	// 			Str("requested_source_volume_id", sourceVolID).
-	// 			Str("actual_source_volume_id", snapshot.VolID).
-	// 			Err(err).
-	// 			Msg("Snapshot with the same name but with different SourceVolumeId already exist")
-	// 		return nil, status.Errorf(codes.AlreadyExists, "snapshot with the same name %q but with different SourceVolumeId already exist", snapshotName)
+	// // Check for an existing snapshot with the specified name.
+	// for _, snapshot := range snapshots {
+	// 	if snapshot.Name != snapshotName {
+	// 		continue
 	// 	}
-	// 	return &csi.CreateSnapshotResponse{
-	// 		Snapshot: &csi.Snapshot{
-	// 			SnapshotId:     snapshot.Id,
-	// 			SourceVolumeId: snapshot.VolID,
-	// 			CreationTime:   snapshot.CreationTime,
-	// 			SizeBytes:      snapshot.SizeBytes,
-	// 			ReadyToUse:     snapshot.ReadyToUse,
-	// 		},
-	// 	}, nil
+	// 	if snapshot.VolumeID == sourceVolID {
+	// 		return &csi.CreateSnapshotResponse{
+	// 			Snapshot: &csi.Snapshot{
+	// 				SnapshotId:     snapshot.SnapshotID,
+	// 				SourceVolumeId: snapshot.VolumeID,
+	// 				CreationTime:   snapshot.CreationTime,
+	// 				SizeBytes:      snapshot.RestoreSize,
+	// 				ReadyToUse:     true,
+	// 			},
+	// 		}, nil
+	// 	}
+	// 	log.Error().
+	// 		Str("snapshot_name", snapshotName).
+	// 		Str("requested_source_volume_id", sourceVolID).
+	// 		Str("actual_source_volume_id", snapshot.VolumeID).
+	// 		Err(err).
+	// 		Msg("Snapshot with the same name but with different SourceVolumeId already exist")
+	// 	return nil, status.Errorf(codes.AlreadyExists, "snapshot with the same name %q but with different SourceVolumeId already exist", snapshotName)
 	// }
 	//
 	// log.Debug().
@@ -648,9 +649,8 @@ func (d *Driver) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequ
 	// 	Str("source_volume_id", sourceVolID).
 	// 	Msg("Create volume snapshot in Civo API")
 	//
-	// result, err := d.CivoClient.CreateSnapshotFromVolume(&civogo.SnapshotConfig{
-	// 	Name:  req.Name,
-	// 	VolID: req.SourceVolumeId,
+	// result, err := d.CivoClient.CreateVolumeSnapshot(sourceVolID, &civogo.VolumeSnapshotConfig{
+	// 	Name: snapshotName,
 	// })
 	// if err != nil {
 	// 	if strings.Contains(err.Error(), "DatabaseVolumeSnapshotLimitExceededError") {
@@ -662,25 +662,25 @@ func (d *Driver) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequ
 	// }
 	//
 	// log.Info().
-	// 	Str("snapshot_id", result.ID).
+	// 	Str("snapshot_id", result.SnapshotID).
 	// 	Msg("Snapshot created in Civo API")
 	//
 	// // NOTE: Add waitFor logic if creation takes long time.
-	// snapshot, err := d.CivoClient.FindSnapshot(result.ID)
+	// snapshot, err := d.CivoClient.GetVolumeSnapshot(result.SnapshotID)
 	// if err != nil {
 	// 	log.Error().
-	// 		Str("snapshot_id", result.ID).
+	// 		Str("snapshot_id", result.SnapshotID).
 	// 		Err(err).
 	// 		Msg("Unsable to get snapshot updates from Civo API")
-	// 	return nil, status.Errorf(codes.Internal, "failed to get snapshot by %q: %s", result.ID, err)
+	// 	return nil, status.Errorf(codes.Internal, "failed to get snapshot by %q: %s", result.SnapshotID, err)
 	// }
 	// return &csi.CreateSnapshotResponse{
 	// 	Snapshot: &csi.Snapshot{
-	// 		SnapshotId:     snapshot.Id,
-	// 		SourceVolumeId: snapshot.VolID,
+	// 		SnapshotId:     snapshot.SnapshotID,
+	// 		SourceVolumeId: snapshot.VolumeID,
 	// 		CreationTime:   snapshot.CreationTime,
-	// 		SizeBytes:      snapshot.SizeBytes,
-	// 		ReadyToUse:     snapshot.ReadyToUse,
+	// 		SizeBytes:      snapshot.RestoreSize,
+	// 		ReadyToUse:     true,
 	// 	},
 	// }, nil
 }
