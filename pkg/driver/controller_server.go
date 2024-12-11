@@ -589,22 +589,21 @@ func (d *Driver) ControllerGetCapabilities(context.Context, *csi.ControllerGetCa
 // CreateSnapshot is part of implementing Snapshot & Restore functionality, but we don't support that
 func (d *Driver) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequest) (*csi.CreateSnapshotResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "")
-
 	// TODO: Uncomment after client implementation is complete.
-	// log.Info().
-	// 	Str("snapshot_name", req.GetName()).
-	// 	Str("source_volume_id", req.GetSourceVolumeId()).
-	// 	Msg("Request: CreateSnapshot")
-	//
-	// if len(req.GetName()) == 0 {
-	// 	return nil, status.Error(codes.InvalidArgument, "Snapshot name is required")
-	// }
-	// if len(req.GetSourceVolumeId()) == 0 {
-	// 	return nil, status.Error(codes.InvalidArgument, "SourceVolumeId is required")
-	// }
-	//
 	// snapshotName := req.GetName()
 	// sourceVolID := req.GetSourceVolumeId()
+	//
+	// log.Info().
+	// 	Str("snapshot_name", snapshotName).
+	// 	Str("source_volume_id", sourceVolID).
+	// 	Msg("Request: CreateSnapshot")
+	//
+	// if len(snapshotName) == 0 {
+	// 	return nil, status.Error(codes.InvalidArgument, "Snapshot name is required")
+	// }
+	// if len(sourceVolID) == 0 {
+	// 	return nil, status.Error(codes.InvalidArgument, "SourceVolumeId is required")
+	// }
 	//
 	// log.Debug().
 	// 	Str("source_volume_id", sourceVolID).
