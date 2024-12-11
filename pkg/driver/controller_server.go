@@ -106,6 +106,9 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 	// 		return nil, status.Error(codes.InvalidArgument, "Volume content source type is set to Snapshot, but the Snapshot is not provided")
 	// 	}
 	// 	snapshotID = snapshot.GetSnapshotId()
+	// 	if snapshotID == "" {
+	// 		return nil, status.Error(codes.InvalidArgument, "Volume content source type is set to Snapshot, but the SnapshotID is not provided")
+	// 	}
 	// }
 
 	log.Debug().Msg("Volume doesn't currently exist, will need creating")
