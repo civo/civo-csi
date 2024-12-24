@@ -10,9 +10,10 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+// Hook defines the lifecycle methods for a hook, such as PreStop, PostStart, and PostStop.
+// Implementations of this interface can define actions to be performed at different lifecycle stages.
 type Hook interface {
 	PreStop(ctx context.Context) error
-	// PostStop, ...
 }
 
 type hook struct {
@@ -21,12 +22,12 @@ type hook struct {
 	clientCfgPath string
 }
 
+// NewHook creates a new Hook with the provided options. It returns an error if setup fails.
 func NewHook(opts ...Option) (Hook, error) {
 	h := &hook{}
 	for _, opt := range append(defaultOpts, opts...) {
 		opt(h)
 	}
-
 	if h.nodeName == "" {
 		return nil, errors.New("node name not found")
 	}

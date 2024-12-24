@@ -19,6 +19,11 @@ var drainTaints = map[string]struct{}{
 	v1.TaintNodeUnschedulable: {}, // Kubernetes common eviction taint (kubectl drain)
 }
 
+// PreStop handles the PreStop lifecycle event. It retrieves the node information
+// from the Kubernetes API and checks if the node is being drained. If the node is not
+// being drained, it skips the VolumeAttachment cleanup check. If the node is being drained,
+// it waits for the cleanup of VolumeAttachments. If any errors occur during this process,
+// they are logged and returned.
 func (h *hook) PreStop(ctx context.Context) error {
 	node, err := h.client.CoreV1().Nodes().Get(ctx, h.nodeName, metav1.GetOptions{})
 	if err != nil {
@@ -49,7 +54,6 @@ func (h *hook) PreStop(ctx context.Context) error {
 	log.Info().
 		Str("node_name", h.nodeName).
 		Msg("Finished waiting for VolumeAttachments cleanup")
-
 	return nil
 }
 

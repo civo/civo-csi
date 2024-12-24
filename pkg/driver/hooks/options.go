@@ -6,6 +6,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// Option represents a configuration function that modifies hook object.
 type Option func(*hook)
 
 var defaultOpts = []Option{
@@ -21,6 +22,7 @@ func WithKubernetesClient(client kubernetes.Interface) Option {
 	}
 }
 
+// WithKubernetesClient returns Option to set Kubernetes config path.
 func WithKubernetesClientConfigPath(path string) Option {
 	return func(h *hook) {
 		if path != "" {
@@ -29,7 +31,7 @@ func WithKubernetesClientConfigPath(path string) Option {
 	}
 }
 
-// WithNodeName returns Option to set node node name.
+// WithNodeName returns Option to set node name.
 func WithNodeName(name string) Option {
 	return func(h *hook) {
 		if name != "" {
