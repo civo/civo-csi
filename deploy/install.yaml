@@ -292,6 +292,10 @@ spec:
               mountPath: /var/lib/kubelet/plugins/csi.civo.com
         - name: civo-csi-plugin
           image: gcr.io/consummate-yew-302509/csi:latest
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/app/civo-csi", "pre-stop"]
           env:
             - name: CSI_ENDPOINT
               value: unix:///var/lib/kubelet/plugins/csi.civo.com/csi.sock
