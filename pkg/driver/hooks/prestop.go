@@ -54,6 +54,7 @@ func (h *hook) PreStop(ctx context.Context) error {
 	log.Info().
 		Str("node_name", h.nodeName).
 		Msg("Finished waiting for VolumeAttachments cleanup")
+
 	return nil
 }
 
