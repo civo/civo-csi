@@ -27,12 +27,17 @@ var drainTaints = map[string]struct{}{
 func (h *hook) PreStop(ctx context.Context) error {
 	node, err := h.client.CoreV1().Nodes().Get(ctx, h.nodeName, metav1.GetOptions{})
 	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			return fmt.Errorf("node %q not found: %w", h.nodeName, err)
+		if !k8serrors.IsNotFound(err) {
+			return err
 		}
-		return err
+		log.Info().
+			Str("node_name", h.nodeName).
+			Msg("Node does not found, assuming the termination event, the node might be in the process of being removed")
 	}
+
+	isDrained := true
 	if !isNodeDrained(node) {
+		isDrained = false
 		log.Info().
 			Str("node_name", h.nodeName).
 			Msg("Node is not being drained, skipping VolumeAttachments cleanup check")
@@ -41,7 +46,8 @@ func (h *hook) PreStop(ctx context.Context) error {
 
 	log.Info().
 		Str("node_name", h.nodeName).
-		Msg("Node is being drained, starting waiting for VolumeAttachments cleanup")
+		Bool("is_drained", isDrained).
+		Msg("Node is being drained or removed, starting the wait for VolumeAttachments cleanup")
 
 	if err := h.waitForVolumeAttachmentsCleanup(ctx); err != nil {
 		log.Error().
