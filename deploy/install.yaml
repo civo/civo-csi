@@ -401,9 +401,10 @@ spec:
           lifecycle:
             preStop:
               exec:
-                - /bin/sh
-                - -c
-                - unbuffer /app/civo-csi pre-stop > /proc/1/fd/1
+                command:
+                  - /bin/sh
+                  - -c
+                  - unbuffer /app/civo-csi pre-stop > /proc/1/fd/1
           env:
             - name: CIVO_API_KEY
               valueFrom:
