@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/rs/zerolog/log"
 	v1 "k8s.io/api/core/v1"
@@ -127,8 +128,14 @@ func (h *hook) waitForVolumeAttachmentsCleanup(ctx context.Context) error {
 		Err(err).
 		Msg("An error occurred while checking the existence of VolumeAttachments, waiting for VolumeAttachments to be deleted")
 
+	tick := time.NewTicker(time.Second)
+	defer tick.Stop()
+
 	select {
 	case <-informerCh:
+	case <-tick.C:
+		log.Info().
+			Msg("Waiting for VolumeAttachments to be deleted")
 	case <-ctx.Done():
 		log.Error().
 			Err(ctx.Err()).
