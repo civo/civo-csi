@@ -131,17 +131,20 @@ func (h *hook) waitForVolumeAttachmentsCleanup(ctx context.Context) error {
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
 
-	select {
-	case <-informerCh:
-	case <-tick.C:
-		log.Info().
-			Msg("Waiting for VolumeAttachments to be deleted")
-	case <-ctx.Done():
-		log.Error().
-			Err(ctx.Err()).
-			Msg("Stopped waiting for VolumeAttachments, therefore some resources might still remain")
+	for {
+		select {
+		case <-informerCh:
+			return nil
+		case <-tick.C:
+			log.Info().
+				Msg("Waiting for VolumeAttachments to be deleted")
+		case <-ctx.Done():
+			log.Error().
+				Err(ctx.Err()).
+				Msg("Stopped waiting for VolumeAttachments, therefore some resources might still remain")
+			return nil
+		}
 	}
-	return nil
 }
 
 func (h *hook) volumeAttachmentEventHandler(ctx context.Context, obj interface{}) error {
