@@ -58,7 +58,8 @@ func run(ctx context.Context) error {
 		switch cmd := os.Args[1]; cmd {
 		case "pre-stop":
 			log.Info().Msg("Running the pre-stop hook for driver")
-			return hook.PreStop(ctx)
+			// return hook.PreStop(ctx)
+			return hook.PreStop(context.Background()) // TODO: delete this code later.
 		default:
 			return fmt.Errorf("not supported command: %q", cmd)
 		}
