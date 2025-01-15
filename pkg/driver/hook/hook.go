@@ -10,7 +10,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// Hook defines the lifecycle methods for a hook, such as PreStop, PostStart, and PostStop.
+// Hook defines the lifecycle methods for a hook, such as PreStop, PostStart ..etc.
 // Implementations of this interface can define actions to be performed at different lifecycle stages.
 type Hook interface {
 	PreStop(ctx context.Context) error
