@@ -86,25 +86,23 @@ func (h *hook) waitForVolumeAttachmentsCleanup(ctx context.Context) error {
 	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		DeleteFunc: func(obj interface{}) {
 			log.Warn().Msg("Received an object in DeleteFunc")
-			if err := h.volumeAttachmentEventHandler(ctx, obj); err != nil {
+			if err := h.volumeAttachmentEventHandler(ctx, obj, stopInformerFn); err != nil {
 				log.Error().
 					Str("node_name", h.nodeName).
 					Err(err).
 					Msg("An error occurred while handling the VolumeAttachment event in DeleteFunc")
 				return
 			}
-			stopInformerFn()
 		},
 		UpdateFunc: func(_, obj interface{}) {
 			log.Warn().Msg("Received an object in UpdateFunc")
-			if err := h.volumeAttachmentEventHandler(ctx, obj); err != nil {
+			if err := h.volumeAttachmentEventHandler(ctx, obj, stopInformerFn); err != nil {
 				log.Error().
 					Str("node_name", h.nodeName).
 					Err(err).
 					Msg("An error occurred while handling the VolumeAttachment event in UpdateFunc")
 				return
 			}
-			stopInformerFn()
 		},
 	})
 	if err != nil {
@@ -134,6 +132,8 @@ func (h *hook) waitForVolumeAttachmentsCleanup(ctx context.Context) error {
 	for {
 		select {
 		case <-informerCh:
+			log.Info().
+				Msg("Stopped informer to check event of VolumeAttachment resource")
 			return nil
 		case <-tick.C:
 			log.Info().
@@ -141,13 +141,13 @@ func (h *hook) waitForVolumeAttachmentsCleanup(ctx context.Context) error {
 		case <-ctx.Done():
 			log.Error().
 				Err(ctx.Err()).
-				Msg("Stopped waiting for VolumeAttachments, therefore some resources might still remain")
+				Msg("Stopped waiting for VolumeAttachments cleanup, therefore some resources might still remain")
 			return nil
 		}
 	}
 }
 
-func (h *hook) volumeAttachmentEventHandler(ctx context.Context, obj interface{}) error {
+func (h *hook) volumeAttachmentEventHandler(ctx context.Context, obj interface{}, stopEventFn func()) error {
 	va, ok := obj.(*storagev1.VolumeAttachment)
 	if !ok {
 		return errors.New("received an object that is not a VolumeAttachment")
@@ -156,6 +156,7 @@ func (h *hook) volumeAttachmentEventHandler(ctx context.Context, obj interface{}
 		if _, err := h.checkVolumeAttachmentsExist(ctx); err != nil {
 			return err
 		}
+		stopEventFn()
 	}
 	return nil
 }

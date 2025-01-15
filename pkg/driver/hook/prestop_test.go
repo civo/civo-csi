@@ -3,7 +3,9 @@ package hook
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/api/core/v1"
@@ -12,7 +14,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 )
@@ -23,9 +24,10 @@ func TestPreStop(t *testing.T) {
 		opts []Option
 	}
 	type test struct {
-		name    string
-		args    args
-		wantErr bool
+		name       string
+		args       args
+		beforeFunc func(*hook)
+		wantErr    bool
 	}
 
 	tests := []test{
@@ -35,20 +37,21 @@ func TestPreStop(t *testing.T) {
 				ctx: context.Background(),
 				opts: []Option{
 					WithNodeName("node-01"),
-					WithKubernetesClient(func() kubernetes.Interface {
-						client := fake.NewSimpleClientset()
-						node := &v1.Node{
-							ObjectMeta: metav1.ObjectMeta{
-								Name: "node-01",
-							},
-							Spec: v1.NodeSpec{},
-						}
-						client.Fake.PrependReactor("get", "nodes", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
-							return true, node, nil
-						})
-						return client
-					}()),
+					WithKubernetesClient(fake.NewSimpleClientset()),
 				},
+			},
+			beforeFunc: func(h *hook) {
+				client := h.client.(*fake.Clientset)
+
+				node := &v1.Node{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "node-01",
+					},
+					Spec: v1.NodeSpec{},
+				}
+				client.Fake.PrependReactor("get", "nodes", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
+					return true, node, nil
+				})
 			},
 		},
 		{
@@ -57,33 +60,34 @@ func TestPreStop(t *testing.T) {
 				ctx: context.Background(),
 				opts: []Option{
 					WithNodeName("node-01"),
-					WithKubernetesClient(func() kubernetes.Interface {
-						client := fake.NewSimpleClientset()
-						node := &v1.Node{
-							ObjectMeta: metav1.ObjectMeta{
-								Name: "node-01",
-							},
-							Spec: v1.NodeSpec{
-								Taints: []v1.Taint{
-									{
-										Key: v1.TaintNodeUnschedulable,
-									},
-								},
-							},
-						}
-						client.Fake.PrependReactor("get", "nodes", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
-							return true, node, nil
-						})
-
-						list := &storagev1.VolumeAttachmentList{
-							Items: []storagev1.VolumeAttachment{},
-						}
-						client.Fake.PrependReactor("list", "volumeattachments", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
-							return true, list, nil
-						})
-						return client
-					}()),
+					WithKubernetesClient(fake.NewSimpleClientset()),
 				},
+			},
+			beforeFunc: func(h *hook) {
+				client := h.client.(*fake.Clientset)
+
+				node := &v1.Node{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "node-01",
+					},
+					Spec: v1.NodeSpec{
+						Taints: []v1.Taint{
+							{
+								Key: v1.TaintNodeUnschedulable,
+							},
+						},
+					},
+				}
+				client.Fake.PrependReactor("get", "nodes", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
+					return true, node, nil
+				})
+
+				list := &storagev1.VolumeAttachmentList{
+					Items: []storagev1.VolumeAttachment{},
+				}
+				client.Fake.PrependReactor("list", "volumeattachments", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
+					return true, list, nil
+				})
 			},
 		},
 		{
@@ -92,24 +96,25 @@ func TestPreStop(t *testing.T) {
 				ctx: context.Background(),
 				opts: []Option{
 					WithNodeName("node-01"),
-					WithKubernetesClient(func() kubernetes.Interface {
-						client := fake.NewSimpleClientset()
-						client.Fake.PrependReactor("get", "nodes", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
-							return true, nil, k8serrors.NewNotFound(schema.GroupResource{
-								Group:    "",
-								Resource: "nodes",
-							}, "node-01")
-						})
-
-						list := &storagev1.VolumeAttachmentList{
-							Items: []storagev1.VolumeAttachment{},
-						}
-						client.Fake.PrependReactor("list", "volumeattachments", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
-							return true, list, nil
-						})
-						return client
-					}()),
+					WithKubernetesClient(fake.NewSimpleClientset()),
 				},
+			},
+			beforeFunc: func(h *hook) {
+				client := h.client.(*fake.Clientset)
+
+				client.Fake.PrependReactor("get", "nodes", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
+					return true, nil, k8serrors.NewNotFound(schema.GroupResource{
+						Group:    "",
+						Resource: "nodes",
+					}, "node-01")
+				})
+
+				list := &storagev1.VolumeAttachmentList{
+					Items: []storagev1.VolumeAttachment{},
+				}
+				client.Fake.PrependReactor("list", "volumeattachments", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
+					return true, list, nil
+				})
 			},
 		},
 		{
@@ -118,14 +123,14 @@ func TestPreStop(t *testing.T) {
 				ctx: context.Background(),
 				opts: []Option{
 					WithNodeName("node-01"),
-					WithKubernetesClient(func() kubernetes.Interface {
-						client := fake.NewSimpleClientset()
-						client.Fake.PrependReactor("get", "nodes", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
-							return true, nil, errors.New("error")
-						})
-						return client
-					}()),
+					WithKubernetesClient(fake.NewSimpleClientset()),
 				},
+			},
+			beforeFunc: func(h *hook) {
+				client := h.client.(*fake.Clientset)
+				client.Fake.PrependReactor("get", "nodes", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
+					return true, nil, errors.New("error")
+				})
 			},
 			wantErr: true,
 		},
@@ -135,29 +140,30 @@ func TestPreStop(t *testing.T) {
 				ctx: context.Background(),
 				opts: []Option{
 					WithNodeName("node-01"),
-					WithKubernetesClient(func() kubernetes.Interface {
-						client := fake.NewSimpleClientset()
-						node := &v1.Node{
-							ObjectMeta: metav1.ObjectMeta{
-								Name: "node-01",
-							},
-							Spec: v1.NodeSpec{
-								Taints: []v1.Taint{
-									{
-										Key: v1.TaintNodeUnschedulable,
-									},
-								},
-							},
-						}
-						client.Fake.PrependReactor("get", "nodes", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
-							return true, node, nil
-						})
-						client.Fake.PrependReactor("list", "volumeattachments", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
-							return true, nil, errors.New("error")
-						})
-						return client
-					}()),
+					WithKubernetesClient(fake.NewSimpleClientset()),
 				},
+			},
+			beforeFunc: func(h *hook) {
+				client := h.client.(*fake.Clientset)
+
+				node := &v1.Node{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "node-01",
+					},
+					Spec: v1.NodeSpec{
+						Taints: []v1.Taint{
+							{
+								Key: v1.TaintNodeUnschedulable,
+							},
+						},
+					},
+				}
+				client.Fake.PrependReactor("get", "nodes", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
+					return true, node, nil
+				})
+				client.Fake.PrependReactor("list", "volumeattachments", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
+					return true, nil, errors.New("error")
+				})
 			},
 			wantErr: true,
 		},
@@ -170,7 +176,15 @@ func TestPreStop(t *testing.T) {
 				tt.Fatal(err)
 			}
 
-			err = h.PreStop(test.args.ctx)
+			ctx, cancel := context.WithCancel(test.args.ctx)
+			defer cancel()
+
+			hook := h.(*hook)
+			if test.beforeFunc != nil {
+				test.beforeFunc(hook)
+			}
+
+			err = h.PreStop(ctx)
 			if test.wantErr {
 				assert.NotNil(tt, err)
 			} else {
@@ -231,9 +245,10 @@ func TestWaitForVolumeAttachmentsCleanup(t *testing.T) {
 		opts []Option
 	}
 	type test struct {
-		name    string
-		args    args
-		wantErr bool
+		name       string
+		args       args
+		beforeFunc func(*hook)
+		wantErr    bool
 	}
 
 	tests := []test{
@@ -243,27 +258,27 @@ func TestWaitForVolumeAttachmentsCleanup(t *testing.T) {
 				ctx: context.Background(),
 				opts: []Option{
 					WithNodeName("node-01"),
-					WithKubernetesClient(func() kubernetes.Interface {
-						client := fake.NewSimpleClientset()
-
-						list := &storagev1.VolumeAttachmentList{
-							Items: []storagev1.VolumeAttachment{
-								{
-									ObjectMeta: metav1.ObjectMeta{
-										Name: "test-volume-attachment-01",
-									},
-									Spec: storagev1.VolumeAttachmentSpec{
-										NodeName: "node-02",
-									},
-								},
-							},
-						}
-						client.Fake.PrependReactor("list", "volumeattachments", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
-							return true, list, nil
-						})
-						return client
-					}()),
+					WithKubernetesClient(fake.NewSimpleClientset()),
 				},
+			},
+			beforeFunc: func(h *hook) {
+				client := h.client.(*fake.Clientset)
+
+				list := &storagev1.VolumeAttachmentList{
+					Items: []storagev1.VolumeAttachment{
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name: "test-volume-attachment-01",
+							},
+							Spec: storagev1.VolumeAttachmentSpec{
+								NodeName: "node-02",
+							},
+						},
+					},
+				}
+				client.Fake.PrependReactor("list", "volumeattachments", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
+					return true, list, nil
+				})
 			},
 		},
 		{
@@ -276,43 +291,160 @@ func TestWaitForVolumeAttachmentsCleanup(t *testing.T) {
 				}(),
 				opts: []Option{
 					WithNodeName("node-01"),
-					WithKubernetesClient(func() kubernetes.Interface {
-						client := fake.NewSimpleClientset()
-
-						list := &storagev1.VolumeAttachmentList{
-							Items: []storagev1.VolumeAttachment{
-								{
-									ObjectMeta: metav1.ObjectMeta{
-										Name: "test-volume-attachment-01",
-									},
-									Spec: storagev1.VolumeAttachmentSpec{
-										NodeName: "node-01",
-									},
-								},
-							},
-						}
-						client.Fake.PrependReactor("list", "volumeattachments", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
-							return true, list, nil
-						})
-						return client
-					}()),
+					WithKubernetesClient(fake.NewSimpleClientset()),
 				},
 			},
+			beforeFunc: func(h *hook) {
+				client := h.client.(*fake.Clientset)
+
+				list := &storagev1.VolumeAttachmentList{
+					Items: []storagev1.VolumeAttachment{
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name: "test-volume-attachment-01",
+							},
+							Spec: storagev1.VolumeAttachmentSpec{
+								NodeName: "node-01",
+							},
+						},
+					},
+				}
+				client.Fake.PrependReactor("list", "volumeattachments", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
+					return true, list, nil
+				})
+			},
 		},
+		func() test {
+			ctx := context.Background()
+			volumeattachment := &storagev1.VolumeAttachment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-volume-attachment-01",
+				},
+				Spec: storagev1.VolumeAttachmentSpec{
+					NodeName: "node-01",
+				},
+				Status: storagev1.VolumeAttachmentStatus{
+					Attached: true,
+				},
+			}
+			var volumeAttachmentDeleted int64
+
+			return test{
+				name: "Returns nil after volume attachment is cleaned up",
+				args: args{
+					ctx: ctx,
+					opts: []Option{
+						WithNodeName("node-01"),
+						WithKubernetesClient(fake.NewSimpleClientset()),
+					},
+				},
+				beforeFunc: func(h *hook) {
+					client := h.client.(*fake.Clientset)
+
+					client.StorageV1().VolumeAttachments().Create(ctx, volumeattachment, metav1.CreateOptions{})
+
+					client.Fake.PrependReactor("list", "volumeattachments", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
+						if atomic.LoadInt64(&volumeAttachmentDeleted) == 1 {
+							return true, &storagev1.VolumeAttachmentList{}, nil
+						}
+						return true, &storagev1.VolumeAttachmentList{
+							Items: []storagev1.VolumeAttachment{*volumeattachment},
+						}, nil
+					})
+
+					// To trigger the event after registering it to the informer.
+					go func() {
+						time.Sleep(time.Second)
+
+						newObj := volumeattachment.DeepCopy()
+						newObj.Status.Attached = false
+						h.client.StorageV1().VolumeAttachments().Update(ctx, newObj, metav1.UpdateOptions{})
+						time.Sleep(100 * time.Millisecond)
+
+						// Since calling delete triggers the event handler, we change the value of volumeAttachmentDeleted before that. This allows us to dynamically modify the value.
+						atomic.StoreInt64(&volumeAttachmentDeleted, 1)
+						h.client.StorageV1().VolumeAttachments().Delete(ctx, newObj.GetName(), metav1.DeleteOptions{})
+						time.Sleep(100 * time.Millisecond)
+					}()
+				},
+			}
+		}(),
+
+		func() test {
+			ctx := context.Background()
+			volumeattachments := &storagev1.VolumeAttachmentList{
+				Items: []storagev1.VolumeAttachment{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "test-volume-attachment-01",
+						},
+						Spec: storagev1.VolumeAttachmentSpec{
+							NodeName: "node-01",
+						},
+					},
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "test-volume-attachment-02",
+						},
+						Spec: storagev1.VolumeAttachmentSpec{
+							NodeName: "node-01",
+						},
+					},
+				},
+			}
+			var volumeAttachmentDeleted int64
+
+			return test{
+				name: "Returns nil after successful deletion of multiple volume attachments",
+				args: args{
+					ctx: ctx,
+					opts: []Option{
+						WithNodeName("node-01"),
+						WithKubernetesClient(fake.NewSimpleClientset()),
+					},
+				},
+				beforeFunc: func(h *hook) {
+					client := h.client.(*fake.Clientset)
+					for _, item := range volumeattachments.Items {
+						client.StorageV1().VolumeAttachments().Create(ctx, &item, metav1.CreateOptions{})
+					}
+
+					client.Fake.PrependReactor("list", "volumeattachments", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
+						if atomic.LoadInt64(&volumeAttachmentDeleted) == 1 {
+							return true, &storagev1.VolumeAttachmentList{}, nil
+						}
+						return true, volumeattachments, nil
+					})
+
+					// To trigger the event after registering it to the informer.
+					go func() {
+						time.Sleep(time.Second)
+
+						client.StorageV1().VolumeAttachments().Delete(ctx, "test-volume-attachment-01", metav1.DeleteOptions{})
+						time.Sleep(100 * time.Millisecond)
+
+						// Since calling delete triggers the event handler, we change the value of volumeAttachmentDeleted before that. This allows us to dynamically modify the value.
+						atomic.StoreInt64(&volumeAttachmentDeleted, 1)
+						client.StorageV1().VolumeAttachments().Delete(ctx, "test-volume-attachment-02", metav1.DeleteOptions{})
+						time.Sleep(100 * time.Millisecond)
+					}()
+				},
+			}
+		}(),
 		{
 			name: "Returns error when listing volume attachments fails in checkVolumeAttachmentsExist method",
 			args: args{
 				ctx: context.Background(),
 				opts: []Option{
 					WithNodeName("node-01"),
-					WithKubernetesClient(func() kubernetes.Interface {
-						client := fake.NewSimpleClientset()
-						client.Fake.PrependReactor("list", "volumeattachments", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
-							return true, nil, errors.New("error")
-						})
-						return client
-					}()),
+					WithKubernetesClient(fake.NewSimpleClientset()),
 				},
+			},
+			beforeFunc: func(h *hook) {
+				client := h.client.(*fake.Clientset)
+				client.Fake.PrependReactor("list", "volumeattachments", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
+					return true, nil, errors.New("error")
+				})
 			},
 			wantErr: true,
 		},
@@ -325,7 +457,15 @@ func TestWaitForVolumeAttachmentsCleanup(t *testing.T) {
 				tt.Fatal(err)
 			}
 
-			err = h.(*hook).waitForVolumeAttachmentsCleanup(test.args.ctx)
+			ctx, cancel := context.WithCancel(test.args.ctx)
+			defer cancel()
+
+			hook := h.(*hook)
+			if test.beforeFunc != nil {
+				test.beforeFunc(hook)
+			}
+
+			err = hook.waitForVolumeAttachmentsCleanup(ctx)
 			if test.wantErr {
 				assert.NotNil(tt, err)
 			} else {
@@ -337,14 +477,16 @@ func TestWaitForVolumeAttachmentsCleanup(t *testing.T) {
 
 func TestVolumeAttachmentEventHandler(t *testing.T) {
 	type args struct {
-		ctx  context.Context
-		obj  interface{}
-		opts []Option
+		ctx         context.Context
+		obj         interface{}
+		stopEventFn func()
+		opts        []Option
 	}
 	type test struct {
-		name    string
-		args    args
-		wantErr bool
+		name       string
+		args       args
+		beforeFunc func(*hook)
+		wantErr    bool
 	}
 
 	tests := []test{
@@ -357,29 +499,30 @@ func TestVolumeAttachmentEventHandler(t *testing.T) {
 						NodeName: "node-02",
 					},
 				},
+				stopEventFn: func() {},
 				opts: []Option{
 					WithNodeName("node-01"),
-					WithKubernetesClient(func() kubernetes.Interface {
-						client := fake.NewSimpleClientset()
-
-						list := &storagev1.VolumeAttachmentList{
-							Items: []storagev1.VolumeAttachment{
-								{
-									ObjectMeta: metav1.ObjectMeta{
-										Name: "test-volume-attachment-01",
-									},
-									Spec: storagev1.VolumeAttachmentSpec{
-										NodeName: "node-02",
-									},
-								},
-							},
-						}
-						client.Fake.PrependReactor("list", "volumeattachments", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
-							return true, list, nil
-						})
-						return client
-					}()),
+					WithKubernetesClient(fake.NewSimpleClientset()),
 				},
+			},
+			beforeFunc: func(h *hook) {
+				client := h.client.(*fake.Clientset)
+
+				list := &storagev1.VolumeAttachmentList{
+					Items: []storagev1.VolumeAttachment{
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name: "test-volume-attachment-01",
+							},
+							Spec: storagev1.VolumeAttachmentSpec{
+								NodeName: "node-02",
+							},
+						},
+					},
+				}
+				client.Fake.PrependReactor("list", "volumeattachments", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
+					return true, list, nil
+				})
 			},
 		},
 		{
@@ -391,12 +534,10 @@ func TestVolumeAttachmentEventHandler(t *testing.T) {
 						NodeName: "node-01",
 					},
 				},
+				stopEventFn: func() {},
 				opts: []Option{
 					WithNodeName("node-01"),
-					WithKubernetesClient(func() kubernetes.Interface {
-						client := fake.NewSimpleClientset()
-						return client
-					}()),
+					WithKubernetesClient(fake.NewSimpleClientset()),
 				},
 			},
 		},
@@ -409,43 +550,42 @@ func TestVolumeAttachmentEventHandler(t *testing.T) {
 						NodeName: "node-01",
 					},
 				},
+				stopEventFn: func() {},
 				opts: []Option{
 					WithNodeName("node-01"),
-					WithKubernetesClient(func() kubernetes.Interface {
-						client := fake.NewSimpleClientset()
-
-						list := &storagev1.VolumeAttachmentList{
-							Items: []storagev1.VolumeAttachment{
-								{
-									ObjectMeta: metav1.ObjectMeta{
-										Name: "test-volume-attachment-01",
-									},
-									Spec: storagev1.VolumeAttachmentSpec{
-										NodeName: "node-01",
-									},
-								},
-							},
-						}
-						client.Fake.PrependReactor("list", "volumeattachments", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
-							return true, list, nil
-						})
-						return client
-					}()),
+					WithKubernetesClient(fake.NewSimpleClientset()),
 				},
+			},
+			beforeFunc: func(h *hook) {
+				client := h.client.(*fake.Clientset)
+
+				list := &storagev1.VolumeAttachmentList{
+					Items: []storagev1.VolumeAttachment{
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name: "test-volume-attachment-01",
+							},
+							Spec: storagev1.VolumeAttachmentSpec{
+								NodeName: "node-01",
+							},
+						},
+					},
+				}
+				client.Fake.PrependReactor("list", "volumeattachments", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
+					return true, list, nil
+				})
 			},
 			wantErr: true,
 		},
 		{
 			name: "Returns error when invalid object is provided",
 			args: args{
-				ctx: context.Background(),
-				obj: "invalid-object",
+				ctx:         context.Background(),
+				obj:         "invalid-object",
+				stopEventFn: func() {},
 				opts: []Option{
 					WithNodeName("node-01"),
-					WithKubernetesClient(func() kubernetes.Interface {
-						client := fake.NewSimpleClientset()
-						return client
-					}()),
+					WithKubernetesClient(fake.NewSimpleClientset()),
 				},
 			},
 			wantErr: true,
@@ -459,7 +599,15 @@ func TestVolumeAttachmentEventHandler(t *testing.T) {
 				tt.Fatal(err)
 			}
 
-			err = h.(*hook).volumeAttachmentEventHandler(test.args.ctx, test.args.obj)
+			ctx, cancel := context.WithCancel(test.args.ctx)
+			defer cancel()
+
+			hook := h.(*hook)
+			if test.beforeFunc != nil {
+				test.beforeFunc(hook)
+			}
+
+			err = hook.volumeAttachmentEventHandler(ctx, test.args.obj, test.args.stopEventFn)
 			if test.wantErr {
 				assert.NotNil(tt, err)
 			} else {
@@ -475,10 +623,11 @@ func TestCheckVolumeAttachmentsExist(t *testing.T) {
 		opts []Option
 	}
 	type test struct {
-		name    string
-		args    args
-		want    bool
-		wantErr bool
+		name       string
+		args       args
+		beforeFunc func(*hook)
+		want       bool
+		wantErr    bool
 	}
 
 	tests := []test{
@@ -488,10 +637,7 @@ func TestCheckVolumeAttachmentsExist(t *testing.T) {
 				ctx: context.Background(),
 				opts: []Option{
 					WithNodeName("node-01"),
-					WithKubernetesClient(func() kubernetes.Interface {
-						client := fake.NewSimpleClientset()
-						return client
-					}()),
+					WithKubernetesClient(fake.NewSimpleClientset()),
 				},
 			},
 		},
@@ -501,27 +647,27 @@ func TestCheckVolumeAttachmentsExist(t *testing.T) {
 				ctx: context.Background(),
 				opts: []Option{
 					WithNodeName("node-01"),
-					WithKubernetesClient(func() kubernetes.Interface {
-						client := fake.NewSimpleClientset()
-
-						list := &storagev1.VolumeAttachmentList{
-							Items: []storagev1.VolumeAttachment{
-								{
-									ObjectMeta: metav1.ObjectMeta{
-										Name: "test-volume-attachment-01",
-									},
-									Spec: storagev1.VolumeAttachmentSpec{
-										NodeName: "node-02",
-									},
-								},
-							},
-						}
-						client.Fake.PrependReactor("list", "volumeattachments", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
-							return true, list, nil
-						})
-						return client
-					}()),
+					WithKubernetesClient(fake.NewSimpleClientset()),
 				},
+			},
+			beforeFunc: func(h *hook) {
+				client := h.client.(*fake.Clientset)
+
+				list := &storagev1.VolumeAttachmentList{
+					Items: []storagev1.VolumeAttachment{
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name: "test-volume-attachment-01",
+							},
+							Spec: storagev1.VolumeAttachmentSpec{
+								NodeName: "node-02",
+							},
+						},
+					},
+				}
+				client.Fake.PrependReactor("list", "volumeattachments", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
+					return true, list, nil
+				})
 			},
 		},
 		{
@@ -530,14 +676,15 @@ func TestCheckVolumeAttachmentsExist(t *testing.T) {
 				ctx: context.Background(),
 				opts: []Option{
 					WithNodeName("node-01"),
-					WithKubernetesClient(func() kubernetes.Interface {
-						client := fake.NewSimpleClientset()
-						client.Fake.PrependReactor("list", "volumeattachments", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
-							return true, nil, errors.New("error")
-						})
-						return client
-					}()),
+					WithKubernetesClient(fake.NewSimpleClientset()),
 				},
+			},
+			beforeFunc: func(h *hook) {
+				client := h.client.(*fake.Clientset)
+
+				client.Fake.PrependReactor("list", "volumeattachments", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
+					return true, nil, errors.New("error")
+				})
 			},
 			wantErr: true,
 		},
@@ -547,27 +694,27 @@ func TestCheckVolumeAttachmentsExist(t *testing.T) {
 				ctx: context.Background(),
 				opts: []Option{
 					WithNodeName("node-01"),
-					WithKubernetesClient(func() kubernetes.Interface {
-						client := fake.NewSimpleClientset()
-
-						list := &storagev1.VolumeAttachmentList{
-							Items: []storagev1.VolumeAttachment{
-								{
-									ObjectMeta: metav1.ObjectMeta{
-										Name: "test-volume-attachment-01",
-									},
-									Spec: storagev1.VolumeAttachmentSpec{
-										NodeName: "node-01",
-									},
-								},
-							},
-						}
-						client.Fake.PrependReactor("list", "volumeattachments", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
-							return true, list, nil
-						})
-						return client
-					}()),
+					WithKubernetesClient(fake.NewSimpleClientset()),
 				},
+			},
+			beforeFunc: func(h *hook) {
+				client := h.client.(*fake.Clientset)
+
+				list := &storagev1.VolumeAttachmentList{
+					Items: []storagev1.VolumeAttachment{
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name: "test-volume-attachment-01",
+							},
+							Spec: storagev1.VolumeAttachmentSpec{
+								NodeName: "node-01",
+							},
+						},
+					},
+				}
+				client.Fake.PrependReactor("list", "volumeattachments", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
+					return true, list, nil
+				})
 			},
 			want:    true,
 			wantErr: true,
@@ -581,7 +728,15 @@ func TestCheckVolumeAttachmentsExist(t *testing.T) {
 				tt.Fatal(err)
 			}
 
-			got, err := h.(*hook).checkVolumeAttachmentsExist(test.args.ctx)
+			ctx, cancel := context.WithCancel(test.args.ctx)
+			defer cancel()
+
+			hook := h.(*hook)
+			if test.beforeFunc != nil {
+				test.beforeFunc(hook)
+			}
+
+			got, err := hook.checkVolumeAttachmentsExist(ctx)
 			if test.wantErr {
 				assert.NotNil(tt, err)
 			} else {
