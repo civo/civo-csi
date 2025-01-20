@@ -163,7 +163,12 @@ func TestControllerUnpublishVolume(t *testing.T) {
 		})
 		assert.Nil(t, err)
 
-		_, err = d.CivoClient.AttachVolume(volume.ID, "instance-1")
+		volConfig := civogo.VolumeAttachConfig{
+			InstanceID: "instance-1",
+			Region:     d.Region,
+		}
+
+		_, err = d.CivoClient.AttachVolume(volume.ID, volConfig)
 		assert.Nil(t, err)
 
 		_, err = d.ControllerUnpublishVolume(context.Background(), &csi.ControllerUnpublishVolumeRequest{
@@ -185,7 +190,11 @@ func TestControllerUnpublishVolume(t *testing.T) {
 		})
 		assert.Nil(t, err)
 
-		_, err = d.CivoClient.AttachVolume(volume.ID, "other-instance")
+		volConfig := civogo.VolumeAttachConfig{
+			InstanceID: "other-instance",
+			Region:     d.Region,
+		}
+		_, err = d.CivoClient.AttachVolume(volume.ID, volConfig)
 		assert.Nil(t, err)
 
 		_, err = d.ControllerUnpublishVolume(context.Background(), &csi.ControllerUnpublishVolumeRequest{
