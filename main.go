@@ -71,7 +71,16 @@ func run(ctx context.Context) error {
 	log.Info().Interface("d", d).Msg("Created a new driver")
 
 	log.Info().Msg("Running the driver")
-	return d.Run(ctx)
+	// return d.Run(ctx)
+
+	// TODO: The following code is for verification purposes only.
+	hook, err := hook.NewHook(
+		hook.WithNodeName(node),
+	)
+	if err != nil {
+		return err
+	}
+	return d.Run(ctx, hook)
 }
 
 func main() {

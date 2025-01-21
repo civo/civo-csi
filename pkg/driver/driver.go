@@ -8,7 +8,9 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"time"
 
+	"github.com/civo/civo-csi/pkg/driver/hook"
 	"github.com/civo/civogo"
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/rs/zerolog"
@@ -101,7 +103,7 @@ func NewTestDriver(fc *civogo.FakeClient) (*Driver, error) {
 }
 
 // Run the driver's gRPC server
-func (d *Driver) Run(ctx context.Context) error {
+func (d *Driver) Run(ctx context.Context, hook hook.Hook) error {
 	log.Debug().Str("socketFilename", d.SocketFilename).Msg("Parsing the socket filename to make a gRPC server")
 	urlParts, _ := url.Parse(d.SocketFilename)
 	log.Debug().Msg("Parsed socket filename")
@@ -155,6 +157,16 @@ func (d *Driver) Run(ctx context.Context) error {
 	eg.Go(func() error {
 		go func() {
 			<-ctx.Done()
+
+			// TODO: The following code is for verification purposes only.
+			if hook != nil {
+				newCtx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+				defer cancel()
+				if err := hook.PreStop(newCtx); err != nil {
+					log.Err(err).Msg("Failed to preStop hook")
+				}
+			}
+
 			log.Debug().Msg("Stopping gRPC because the context was cancelled")
 			d.grpcServer.GracefulStop()
 		}()
