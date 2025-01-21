@@ -293,7 +293,13 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 			Str("volume_status", volume.Status).
 			Str("reqested_instance_id", req.NodeId).
 			Msg("Requesting volume to be attached in Civo API")
-		_, err = d.CivoClient.AttachVolume(req.VolumeId, req.NodeId)
+
+		volConfig := civogo.VolumeAttachConfig{
+			InstanceID: req.NodeId,
+			Region:     d.Region,
+		}
+
+		_, err = d.CivoClient.AttachVolume(req.VolumeId, volConfig)
 		if err != nil {
 			log.Error().Err(err).Msg("Unable to attach volume in Civo API")
 			return nil, err
