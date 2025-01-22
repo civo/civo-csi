@@ -35,7 +35,7 @@ func TestCivoCSI(t *testing.T) {
 
 	var eg errgroup.Group
 	eg.Go(func() error {
-		return d.Run(ctx, nil)
+		return d.Run(ctx)
 	})
 
 	config := sanity.NewTestConfig()
