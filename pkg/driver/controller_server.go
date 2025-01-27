@@ -750,6 +750,11 @@ func (d *Driver) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsReques
 	}
 
 	if len(snapshotID) != 0 && len(sourceVolumeID) != 0 {
+		log.Debug().
+			Str("snapshot_id", snapshotID).
+			Str("source_volume_id", sourceVolumeID).
+			Msg("Fetching snapshot")
+
 		snapshot, err := d.CivoClient.GetVolumeSnapshotByVolumeID(sourceVolumeID, snapshotID)
 		if err != nil {
 			// Todo: DatabaseSnapshotNotFoundError & DiskSnapshotNotFoundError are placeholders, it's still not clear what error will be returned by API (awaiting implementation - WIP)
@@ -822,6 +827,10 @@ func (d *Driver) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsReques
 				entries = append(entries, convertSnapshot(&snapshot))
 			}
 		}
+		sort.Slice(entries, func(i, j int) bool {
+			return entries[i].GetSnapshot().GetSnapshotId() < entries[j].GetSnapshot().GetSnapshotId()
+		})
+
 		return &csi.ListSnapshotsResponse{
 			Entries: entries,
 		}, nil
