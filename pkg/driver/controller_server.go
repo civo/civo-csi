@@ -640,7 +640,7 @@ func (d *Driver) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequ
 		return nil, status.Errorf(codes.Internal, "failed to list snapshots by %q: %s", sourceVolID, err)
 	}
 
-	// // Check for an existing snapshot with the specified name.
+	// Check for an existing snapshot with the specified name.
 	for _, snapshot := range snapshots {
 		if snapshot.Name != snapshotName {
 			continue
@@ -651,8 +651,8 @@ func (d *Driver) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequ
 					SnapshotId:     snapshot.SnapshotID,
 					SourceVolumeId: snapshot.VolumeID,
 					// CreationTime:   snapshot.CreationTime, // TODO
-					SizeBytes:  int64(snapshot.RestoreSize),
-					ReadyToUse: true,
+					SizeBytes: int64(snapshot.RestoreSize),
+					// ReadyToUse: true, // TODO
 				},
 			}, nil
 		}
@@ -687,6 +687,7 @@ func (d *Driver) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequ
 		Msg("Snapshot created in Civo API")
 
 	// NOTE: Add waitFor logic if creation takes long time.
+	time.Sleep(5 * time.Second)
 	snapshot, err := d.CivoClient.GetVolumeSnapshot(result.SnapshotID)
 	if err != nil {
 		log.Error().
@@ -699,20 +700,21 @@ func (d *Driver) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequ
 		Snapshot: &csi.Snapshot{
 			SnapshotId:     snapshot.SnapshotID,
 			SourceVolumeId: snapshot.VolumeID,
-			// CreationTime:   snapshot.CreationTime, // TODO
-			SizeBytes:  int64(snapshot.RestoreSize),
-			ReadyToUse: true,
+			// CreationTime:   snapshot.CreationTime, // TODO:
+			SizeBytes: int64(snapshot.RestoreSize),
+			// ReadyToUse: true, // TODO:
 		},
 	}, nil
 }
 
 // DeleteSnapshot is part of implementing Snapshot & Restore functionality, and it will be supported in the future.
 func (d *Driver) DeleteSnapshot(ctx context.Context, req *csi.DeleteSnapshotRequest) (*csi.DeleteSnapshotResponse, error) {
+	snapshotID := req.GetSnapshotId()
+
 	log.Info().
 		Str("snapshot_id", req.GetSnapshotId()).
 		Msg("Request: DeleteSnapshot")
 
-	snapshotID := req.GetSnapshotId()
 	if snapshotID == "" {
 		return nil, status.Error(codes.InvalidArgument, "must provide SnapshotId to DeleteSnapshot")
 	}
@@ -762,12 +764,14 @@ func (d *Driver) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsReques
 				strings.Contains(err.Error(), "DiskSnapshotNotFoundError") {
 				log.Info().
 					Str("snapshot_id", snapshotID).
+					Str("source_volume_id", sourceVolumeID).
 					Msg("ListSnapshots: no snapshot found, returning with success")
 				return &csi.ListSnapshotsResponse{}, nil
 			}
 			log.Error().
 				Err(err).
 				Str("snapshot_id", snapshotID).
+				Str("source_volume_id", sourceVolumeID).
 				Msg("Failed to list snapshot from Civo API")
 			return nil, status.Errorf(codes.Internal, "failed to list snapshot %q: %v", snapshotID, err)
 		}
@@ -877,15 +881,14 @@ func getVolSizeInBytes(capRange *csi.CapacityRange) (int64, error) {
 }
 
 // convertSnapshot function converts a civogo.Snapshot object(API response) into a CSI ListSnapshotsResponse_Entry
-func convertSnapshot(snap *civogo.VolumeSnapshot) *csi.ListSnapshotsResponse_Entry {
-	return nil
-	// return &csi.ListSnapshotsResponse_Entry{
-	// 	Snapshot: &csi.Snapshot{
-	// 		SnapshotId:     snap.Id,
-	// 		SourceVolumeId: snap.VolID,
-	// 		CreationTime:   snap.CreationTime,
-	// 		SizeBytes:      snap.SizeBytes,
-	// 		ReadyToUse:     snap.ReadyToUse,
-	// 	},
-	// }
+func convertSnapshot(in *civogo.VolumeSnapshot) *csi.ListSnapshotsResponse_Entry {
+	return &csi.ListSnapshotsResponse_Entry{
+		Snapshot: &csi.Snapshot{
+			SnapshotId:     in.SnapshotID,
+			SourceVolumeId: in.VolumeID,
+			// CreationTime:   snap.CreationTime,
+			SizeBytes: int64(in.RestoreSize),
+			// ReadyToUse: snap.ReadyToUse,
+		},
+	}
 }
