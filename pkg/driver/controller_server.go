@@ -12,6 +12,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // BytesInGigabyte describes how many bytes are in a gigabyte
@@ -646,13 +647,17 @@ func (d *Driver) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequ
 			continue
 		}
 		if snapshot.VolumeID == sourceVolID {
+			creationTime, err := ParseTimeToProtoTimestamp(snapshot.CreationTime)
+			if err != nil {
+				return nil, status.Error(codes.Internal, fmt.Sprintf("failed to parse creation time: %v", err))
+			}
 			return &csi.CreateSnapshotResponse{
 				Snapshot: &csi.Snapshot{
 					SnapshotId:     snapshot.SnapshotID,
 					SourceVolumeId: snapshot.VolumeID,
-					// CreationTime:   snapshot.CreationTime, // TODO
+					CreationTime:   creationTime, // TODO
 					SizeBytes: int64(snapshot.RestoreSize),
-					// ReadyToUse: true, // TODO
+					ReadyToUse: true, // TODO
 				},
 			}, nil
 		}
@@ -696,11 +701,15 @@ func (d *Driver) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequ
 			Msg("Unsable to get snapshot updates from Civo API")
 		return nil, status.Errorf(codes.Internal, "failed to get snapshot by %q: %s", result.SnapshotID, err)
 	}
+	creationTime, err := ParseTimeToProtoTimestamp(snapshot.CreationTime)
+	if err != nil {
+		return nil, status.Error(codes.Internal, fmt.Sprintf("failed to parse creation time: %v", err))
+	}
 	return &csi.CreateSnapshotResponse{
 		Snapshot: &csi.Snapshot{
 			SnapshotId:     snapshot.SnapshotID,
 			SourceVolumeId: snapshot.VolumeID,
-			// CreationTime:   snapshot.CreationTime, // TODO:
+			CreationTime:   creationTime, // TODO:
 			SizeBytes: int64(snapshot.RestoreSize),
 			// ReadyToUse: true, // TODO:
 		},
@@ -882,6 +891,10 @@ func getVolSizeInBytes(capRange *csi.CapacityRange) (int64, error) {
 
 // convertSnapshot function converts a civogo.Snapshot object(API response) into a CSI ListSnapshotsResponse_Entry
 func convertSnapshot(in *civogo.VolumeSnapshot) *csi.ListSnapshotsResponse_Entry {
+	// creationTime, err := ParseTimeToProtoTimestamp(in.CreationTime)
+	// if err != nil {
+	// 	return nil, status.Error(codes.Internal, fmt.Sprintf("failed to parse creation time: %v", err))
+	// }
 	return &csi.ListSnapshotsResponse_Entry{
 		Snapshot: &csi.Snapshot{
 			SnapshotId:     in.SnapshotID,
@@ -891,4 +904,12 @@ func convertSnapshot(in *civogo.VolumeSnapshot) *csi.ListSnapshotsResponse_Entry
 			// ReadyToUse: snap.ReadyToUse,
 		},
 	}
+}
+
+func ParseTimeToProtoTimestamp(timeStr string) (*timestamppb.Timestamp, error) {
+    t, err := time.Parse(time.RFC3339, timeStr)
+    if err != nil {
+        return nil, err
+    }
+    return timestamppb.New(t), nil
 }
