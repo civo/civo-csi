@@ -12,10 +12,8 @@ github.com/cespare/xxhash/v2 v2.2.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XL
 github.com/chzyer/logex v1.1.10/go.mod h1:+Ywpsq7O8HXn0nuIou7OrIPyXbp3wmkHB+jjWRnGsAI=
 github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e/go.mod h1:nSuG5e5PlCu98SY8svDHJxuZscDgtXS6KTTbou5AhLI=
 github.com/chzyer/test v0.0.0-20180213035817-a1ea475d72b1/go.mod h1:Q3SI9o4m/ZMnBNeIyt5eFwwo7qiLfzFZmjNmxjkiQlU=
-github.com/civo/civogo v0.3.67 h1:R6MepF20Od7KQdcEKpr3GD8zKy1Jly0SuBDubZkEU2s=
-github.com/civo/civogo v0.3.67/go.mod h1:S/iYmGvQOraxdRtcXeq/2mVX01/ia2qfpQUp2SsTLKA=
-github.com/civo/civogo v0.3.92 h1:fiA9nsyvEU9vVwA8ssIDSGt6gsWs6meqgaKrimAEaI0=
-github.com/civo/civogo v0.3.92/go.mod h1:7UCYX+qeeJbrG55E1huv+0ySxcHTqq/26FcHLVelQJM=
+github.com/civo/civogo v0.3.93 h1:wxzMamDKYu2lszObvx92tTFDpi0sCJbDO+CL3cR/P28=
+github.com/civo/civogo v0.3.93/go.mod h1:7UCYX+qeeJbrG55E1huv+0ySxcHTqq/26FcHLVelQJM=
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
 github.com/cncf/udpa/go v0.0.0-20191209042840-269d4d468f6f/go.mod h1:M8M6+tZqaGXZJjfX53e64911xZQV5JYwmTeXPW+k8Sc=
 github.com/cncf/udpa/go v0.0.0-20201120205902-5459f2c99403/go.mod h1:WmhPx2Nbnhtbo57+VJT5O0JRkEi1Wbu0z5j0R8u5Hbk=
