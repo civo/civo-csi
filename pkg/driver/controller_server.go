@@ -586,8 +586,8 @@ func (d *Driver) ControllerGetCapabilities(context.Context, *csi.ControllerGetCa
 		csi.ControllerServiceCapability_RPC_LIST_VOLUMES,
 		csi.ControllerServiceCapability_RPC_GET_CAPACITY,
 		csi.ControllerServiceCapability_RPC_EXPAND_VOLUME,
-		// csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT, TODO: Uncomment after client implementation is complete.
-		// csi.ControllerServiceCapability_RPC_LIST_SNAPSHOTS, TODO: Uncomment after client implementation is complete.
+		csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT,
+		csi.ControllerServiceCapability_RPC_LIST_SNAPSHOTS,
 	}
 
 	var csc []*csi.ControllerServiceCapability
@@ -651,13 +651,16 @@ func (d *Driver) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequ
 			if err != nil {
 				return nil, status.Error(codes.Internal, fmt.Sprintf("failed to parse creation time: %v", err))
 			}
+
+			isReady := isSnapshotReady(snapshot.State)
+
 			return &csi.CreateSnapshotResponse{
 				Snapshot: &csi.Snapshot{
 					SnapshotId:     snapshot.SnapshotID,
 					SourceVolumeId: snapshot.VolumeID,
-					CreationTime:   creationTime, // TODO
-					SizeBytes: int64(snapshot.RestoreSize),
-					ReadyToUse: true, // TODO
+					CreationTime:   creationTime,
+					SizeBytes:      int64(snapshot.RestoreSize),
+					ReadyToUse:     isReady,
 				},
 			}, nil
 		}
@@ -705,13 +708,16 @@ func (d *Driver) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequ
 	if err != nil {
 		return nil, status.Error(codes.Internal, fmt.Sprintf("failed to parse creation time: %v", err))
 	}
+
+	isReady := isSnapshotReady(snapshot.State)
+
 	return &csi.CreateSnapshotResponse{
 		Snapshot: &csi.Snapshot{
 			SnapshotId:     snapshot.SnapshotID,
 			SourceVolumeId: snapshot.VolumeID,
-			CreationTime:   creationTime, // TODO:
-			SizeBytes: int64(snapshot.RestoreSize),
-			// ReadyToUse: true, // TODO:
+			CreationTime:   creationTime,
+			SizeBytes:      int64(snapshot.RestoreSize),
+			ReadyToUse:     isReady,
 		},
 	}, nil
 }
@@ -768,9 +774,7 @@ func (d *Driver) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsReques
 
 		snapshot, err := d.CivoClient.GetVolumeSnapshotByVolumeID(sourceVolumeID, snapshotID)
 		if err != nil {
-			// Todo: DatabaseSnapshotNotFoundError & DiskSnapshotNotFoundError are placeholders, it's still not clear what error will be returned by API (awaiting implementation - WIP)
-			if strings.Contains(err.Error(), "DatabaseSnapshotNotFoundError") ||
-				strings.Contains(err.Error(), "DiskSnapshotNotFoundError") {
+			if strings.Contains(err.Error(), "DatabaseSnapshotNotFoundError") {
 				log.Info().
 					Str("snapshot_id", snapshotID).
 					Str("source_volume_id", sourceVolumeID).
@@ -784,9 +788,19 @@ func (d *Driver) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsReques
 				Msg("Failed to list snapshot from Civo API")
 			return nil, status.Errorf(codes.Internal, "failed to list snapshot %q: %v", snapshotID, err)
 		}
+		entry, err := convertSnapshot(snapshot)
+		if err != nil {
+			log.Error().
+				Err(err).
+				Str("SnapshotID", snapshot.SnapshotID).
+				Str("VolumeID", snapshot.VolumeID).
+				Msg("Failed to convert civo snapshot to CSI snapshot")
+			return nil, status.Errorf(codes.Internal, "failed to convert civo snapshot to CSI snapshot %s: %v", snapshot.SnapshotID, err)
+		}
+
 		return &csi.ListSnapshotsResponse{
 			Entries: []*csi.ListSnapshotsResponse_Entry{
-				convertSnapshot(snapshot),
+				entry,
 			},
 		}, nil
 	}
@@ -798,9 +812,7 @@ func (d *Driver) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsReques
 
 		snapshot, err := d.CivoClient.GetVolumeSnapshot(snapshotID)
 		if err != nil {
-			// Todo: DatabaseSnapshotNotFoundError & DiskSnapshotNotFoundError are placeholders, it's still not clear what error will be returned by API (awaiting implementation - WIP)
-			if strings.Contains(err.Error(), "DatabaseSnapshotNotFoundError") ||
-				strings.Contains(err.Error(), "DiskSnapshotNotFoundError") {
+			if strings.Contains(err.Error(), "DatabaseSnapshotNotFoundError") {
 				log.Info().
 					Str("snapshot_id", snapshotID).
 					Msg("ListSnapshots: no snapshot found, returning with success")
@@ -812,9 +824,19 @@ func (d *Driver) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsReques
 				Msg("Failed to list snapshot from Civo API")
 			return nil, status.Errorf(codes.Internal, "failed to list snapshot %q: %v", snapshotID, err)
 		}
+
+		entry, err := convertSnapshot(snapshot)
+		if err != nil {
+			log.Error().
+				Err(err).
+				Str("SnapshotID", snapshot.SnapshotID).
+				Str("VolumeID", snapshot.VolumeID).
+				Msg("Failed to convert civo snapshot to CSI snapshot")
+			return nil, status.Errorf(codes.Internal, "failed to convert civo snapshot to CSI snapshot %s: %v", snapshot.SnapshotID, err)
+		}
 		return &csi.ListSnapshotsResponse{
 			Entries: []*csi.ListSnapshotsResponse_Entry{
-				convertSnapshot(snapshot),
+				entry,
 			},
 		}, nil
 	}
@@ -837,7 +859,16 @@ func (d *Driver) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsReques
 		entries := []*csi.ListSnapshotsResponse_Entry{}
 		for _, snapshot := range snapshots {
 			if snapshot.VolumeID == sourceVolumeID {
-				entries = append(entries, convertSnapshot(&snapshot))
+				entry, err := convertSnapshot(&snapshot)
+				if err != nil {
+					log.Error().
+						Err(err).
+						Str("SnapshotID", snapshot.SnapshotID).
+						Str("VolumeID", snapshot.VolumeID).
+						Msg("Failed to convert civo snapshot to CSI snapshot")
+					return nil, status.Errorf(codes.Internal, "failed to convert civo snapshot to CSI snapshot %s: %v", snapshot.SnapshotID, err)
+				}
+				entries = append(entries, entry)
 			}
 		}
 		sort.Slice(entries, func(i, j int) bool {
@@ -862,8 +893,19 @@ func (d *Driver) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsReques
 	})
 
 	entries := []*csi.ListSnapshotsResponse_Entry{}
+
 	for _, snap := range snapshots {
-		entries = append(entries, convertSnapshot(&snap))
+		entry, err := convertSnapshot(&snap)
+		if err != nil {
+			log.Error().
+				Err(err).
+				Str("SnapshotID", snap.SnapshotID).
+				Str("VolumeID", snap.VolumeID).
+				Msg("Failed to convert civo snapshot to CSI snapshot")
+			return nil, status.Errorf(codes.Internal, "failed to convert civo snapshot to CSI snapshot %s: %v", snap.SnapshotID, err)
+		}
+		entries = append(entries, entry)
+
 	}
 
 	log.Info().
@@ -890,26 +932,41 @@ func getVolSizeInBytes(capRange *csi.CapacityRange) (int64, error) {
 }
 
 // convertSnapshot function converts a civogo.Snapshot object(API response) into a CSI ListSnapshotsResponse_Entry
-func convertSnapshot(in *civogo.VolumeSnapshot) *csi.ListSnapshotsResponse_Entry {
-	// creationTime, err := ParseTimeToProtoTimestamp(in.CreationTime)
-	// if err != nil {
-	// 	return nil, status.Error(codes.Internal, fmt.Sprintf("failed to parse creation time: %v", err))
-	// }
+func convertSnapshot(in *civogo.VolumeSnapshot) (*csi.ListSnapshotsResponse_Entry, error) {
+	creationTime, err := ParseTimeToProtoTimestamp(in.CreationTime)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse creation time for snapshot %s: %w", in.SnapshotID, err)
+	}
+
+	// Explicitly define which state indicates the snapshot is ready for use
+	isReady := isSnapshotReady(in.State)
+
 	return &csi.ListSnapshotsResponse_Entry{
 		Snapshot: &csi.Snapshot{
 			SnapshotId:     in.SnapshotID,
 			SourceVolumeId: in.VolumeID,
-			// CreationTime:   snap.CreationTime,
-			SizeBytes: int64(in.RestoreSize),
-			// ReadyToUse: snap.ReadyToUse,
+			CreationTime:   creationTime,
+			SizeBytes:      int64(in.RestoreSize),
+			ReadyToUse:     isReady,
 		},
-	}
+	}, nil
 }
 
+// ParseTimeToProtoTimestamp parses a time string in RFC3339 format to *timestamppb.Timestamp.
 func ParseTimeToProtoTimestamp(timeStr string) (*timestamppb.Timestamp, error) {
-    t, err := time.Parse(time.RFC3339, timeStr)
-    if err != nil {
-        return nil, err
-    }
-    return timestamppb.New(t), nil
+	t, err := time.Parse(time.RFC3339, timeStr)
+	if err != nil {
+		return nil, err
+	}
+	return timestamppb.New(t), nil
+}
+
+// isSnapshotReady determines if a snapshot is ready for use
+func isSnapshotReady(state string) bool {
+	// Define the states that indicate the snapshot is ready
+	readyStates := map[string]bool{
+		"Ready":     true,
+		"Available": true, // Add other states if applicable
+	}
+	return readyStates[state]
 }
