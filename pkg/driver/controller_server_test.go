@@ -2,6 +2,7 @@ package driver_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/civo/civo-csi/pkg/driver"
@@ -289,4 +290,151 @@ func TestGetCapacity(t *testing.T) {
 		assert.Equal(t, int64(0), resp.AvailableCapacity)
 	})
 
+}
+
+
+func TestControllerExpandVolume(t *testing.T) {
+	tests := []struct {
+		name           string
+		volumeID       string
+		capacityRange  *csi.CapacityRange
+		initialVolume  *civogo.Volume
+		expectedError  error
+		expectedSizeGB int64
+		mockError      error
+	}{
+		{
+			name:     "Successfully expand volume",
+			volumeID: "vol-123",
+			capacityRange: &csi.CapacityRange{
+				RequiredBytes: 20,
+			},
+			initialVolume: &civogo.Volume{
+				ID:             "vol-123",
+				SizeGigabytes:  10,
+				Status:         "available",
+			},
+			expectedError:  nil,
+			expectedSizeGB: 20,
+			mockError:      nil,
+		},
+		{
+			name:     "Volume ID is missing",
+			volumeID: "",
+			capacityRange: &csi.CapacityRange{
+				RequiredBytes: 20,
+			},
+			initialVolume:  nil,
+			expectedError:  status.Error(codes.InvalidArgument, "must provide a VolumeId to ControllerExpandVolume"),
+			expectedSizeGB: 0,
+			mockError:      nil,
+		},
+		{
+			name:          "Capacity range is missing",
+			volumeID:      "vol-123",
+			capacityRange: nil,
+			initialVolume: &civogo.Volume{
+				ID:             "vol-123",
+				SizeGigabytes:  10,
+				Status:         "available",
+			},
+			expectedError:  status.Error(codes.InvalidArgument, "must provide a capacity range to ControllerExpandVolume"),
+			expectedSizeGB: 0,
+			mockError:      nil,
+		},
+		{
+			name:     "Volume is already resizing",
+			volumeID: "vol-123",
+			capacityRange: &csi.CapacityRange{
+				RequiredBytes: 20,
+			},
+			initialVolume: &civogo.Volume{
+				ID:             "vol-123",
+				SizeGigabytes:  10,
+				Status:         "resizing",
+			},
+			expectedError:  status.Error(codes.Aborted, "volume is already being resized"),
+			expectedSizeGB: 0,
+			mockError:      nil,
+		},
+		{
+			name:     "Volume is not available for expansion",
+			volumeID: "vol-123",
+			capacityRange: &csi.CapacityRange{
+				RequiredBytes: 20,
+			},
+			initialVolume: &civogo.Volume{
+				ID:             "vol-123",
+				SizeGigabytes:  10,
+				Status:         "attached",
+			},
+			expectedError:  status.Error(codes.FailedPrecondition, "volume is not in an availble state for OFFLINE expansion"),
+			expectedSizeGB: 0,
+			mockError:      nil,
+		},
+		{
+			name:     "Desired size is smaller than current size",
+			volumeID: "vol-123",
+			capacityRange: &csi.CapacityRange{
+				RequiredBytes: 5,
+			},
+			initialVolume: &civogo.Volume{
+				ID:             "vol-123",
+				SizeGigabytes:  10,
+				Status:         "available",
+			},
+			expectedError:  nil,
+			expectedSizeGB: 10, // Current size should be returned
+			mockError:      nil,
+		},
+		{
+			name:     "Failed to resize volume in Civo API",
+			volumeID: "vol-123",
+			capacityRange: &csi.CapacityRange{
+				RequiredBytes: 20,
+			},
+			initialVolume: &civogo.Volume{
+				ID:             "vol-123",
+				SizeGigabytes:  10,
+				Status:         "available",
+			},
+			expectedError:  status.Errorf(codes.Internal, "cannot resize volume vol-123: API error"),
+			expectedSizeGB: 0,
+			mockError:      fmt.Errorf("API error"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a fake Civo client
+			fc := &civogo.FakeClient{
+				Volumes: []civogo.Volume{*tt.initialVolume},
+			}
+			d, _ := NewTestDriver(fc)
+
+			// Mock the ResizeVolume method
+			fc.ResizeVolumeFn = func(volumeID string, size int) (*civogo.Volume, error) {
+				if tt.mockError != nil {
+					return nil, tt.mockError
+				}
+				tt.initialVolume.SizeGigabytes = size
+				return tt.initialVolume, nil
+			}
+
+			// Call the method under test
+			resp, err := d.ControllerExpandVolume(context.Background(), &csi.ControllerExpandVolumeRequest{
+				VolumeId:      tt.volumeID,
+				CapacityRange: tt.capacityRange,
+			})
+
+			// Assert the expected error
+			if tt.expectedError != nil {
+				assert.Equal(t, tt.expectedError, err)
+			} else {
+				assert.Nil(t, err)
+				assert.Equal(t, tt.expectedSizeGB*BytesInGigabyte, resp.CapacityBytes)
+				assert.True(t, resp.NodeExpansionRequired)
+			}
+		})
+	}
 }
