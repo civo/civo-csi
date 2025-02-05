@@ -318,6 +318,20 @@ func TestControllerExpandVolume(t *testing.T) {
 			expectedSizeGB: 20,
 		},
 		{
+			name:     "Desired size not an exact multiple of BytesInGigabyte",
+			volumeID: "vol-123",
+			capacityRange: &csi.CapacityRange{
+				RequiredBytes: 20*driver.BytesInGigabyte + 1, // 20 GB + 1 byte
+			},
+			initialVolume: &civogo.Volume{
+				ID:             "vol-123",
+				SizeGigabytes:  10,
+				Status:         "available",
+			},
+			expectedError:  nil,
+			expectedSizeGB: 21, // Desired size should be rounded up to 21 GB
+		},
+		{
 			name:     "Volume ID is missing",
 			volumeID: "",
 			capacityRange: &csi.CapacityRange{
