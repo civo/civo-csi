@@ -647,28 +647,23 @@ func (d *Driver) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequ
 			continue
 		}
 		if snapshot.VolumeID == sourceVolID {
-			creationTime, err := ParseTimeToProtoTimestamp(snapshot.CreationTime)
-			if err != nil {
-				return nil, status.Error(codes.Internal, fmt.Sprintf("failed to parse creation time: %v", err))
+			snap, err := toCSISnapshot(&snapshot)
+			if err != nil{
+				log.Error().
+					Str("snapshot_name", snapshotName).
+					Str("source_volume_id", sourceVolID).
+					Err(err).
+					Msg("filed to convert civo snapshot to csi snapshot")
+				return nil, status.Errorf(codes.Internal, "filed to convert civo snapshot %s to csi snapshot: %v", snapshot.SnapshotID, err)
 			}
-
-			isReady := isSnapshotReady(snapshot.State)
-
 			return &csi.CreateSnapshotResponse{
-				Snapshot: &csi.Snapshot{
-					SnapshotId:     snapshot.SnapshotID,
-					SourceVolumeId: snapshot.VolumeID,
-					CreationTime:   creationTime,
-					SizeBytes:      int64(snapshot.RestoreSize),
-					ReadyToUse:     isReady,
-				},
+				Snapshot: snap,
 			}, nil
 		}
 		log.Error().
 			Str("snapshot_name", snapshotName).
 			Str("requested_source_volume_id", sourceVolID).
 			Str("actual_source_volume_id", snapshot.VolumeID).
-			Err(err).
 			Msg("Snapshot with the same name but with different SourceVolumeId already exist")
 		return nil, status.Errorf(codes.AlreadyExists, "snapshot with the same name %q but with different SourceVolumeId already exist", snapshotName)
 	}
@@ -933,22 +928,13 @@ func getVolSizeInBytes(capRange *csi.CapacityRange) (int64, error) {
 
 // convertSnapshot function converts a civogo.Snapshot object(API response) into a CSI ListSnapshotsResponse_Entry
 func convertSnapshot(in *civogo.VolumeSnapshot) (*csi.ListSnapshotsResponse_Entry, error) {
-	creationTime, err := ParseTimeToProtoTimestamp(in.CreationTime)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse creation time for snapshot %s: %w", in.SnapshotID, err)
+	snap, err := toCSISnapshot(in)
+	if err != nil{
+		return nil, fmt.Errorf("filed to convert civo snapshot %s to csi snapshot: %v", in.SnapshotID, err)
 	}
 
-	// Explicitly define which state indicates the snapshot is ready for use
-	isReady := isSnapshotReady(in.State)
-
 	return &csi.ListSnapshotsResponse_Entry{
-		Snapshot: &csi.Snapshot{
-			SnapshotId:     in.SnapshotID,
-			SourceVolumeId: in.VolumeID,
-			CreationTime:   creationTime,
-			SizeBytes:      int64(in.RestoreSize),
-			ReadyToUse:     isReady,
-		},
+		Snapshot: snap,
 	}, nil
 }
 
@@ -969,4 +955,23 @@ func isSnapshotReady(state string) bool {
 		"Available": true, // Add other states if applicable
 	}
 	return readyStates[state]
+}
+
+
+func toCSISnapshot(snap *civogo.VolumeSnapshot)(*csi.Snapshot, error){
+	creationTime, err := ParseTimeToProtoTimestamp(snap.CreationTime)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse creation time for snapshot %s: %w", snap.SnapshotID, err)
+	}
+
+	// Explicitly define which state indicates the snapshot is ready for use
+	isReady := isSnapshotReady(snap.State)
+
+	return &csi.Snapshot{
+		SnapshotId:     snap.SnapshotID,
+			SourceVolumeId: snap.VolumeID,
+			CreationTime:   creationTime,
+			SizeBytes:      int64(snap.RestoreSize),
+			ReadyToUse:     isReady,
+	}, nil
 }
