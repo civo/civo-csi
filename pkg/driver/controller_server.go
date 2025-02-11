@@ -444,7 +444,15 @@ func (d *Driver) ControllerExpandVolume(ctx context.Context, req *csi.Controller
 	}
 
 	log.Info().Int64("size_gb", desiredSize).Str("volume_id", volID).Msg("Volume resize request sent")
-	d.CivoClient.ResizeVolume(volID, int(desiredSize))
+	_, err = d.CivoClient.ResizeVolume(volID, int(desiredSize))
+	// Handles unexpected errors (e.g., API retry error or other upstream errors).
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("VolumeID", volID).
+			Msg("Failed to resize volume in Civo API")
+		return nil, status.Errorf(codes.Internal, "cannot resize volume %s: %s", volID, err.Error())
+	}
 
 	// Resizes can take a while, double the number of normal retries
 	available, err := d.waitForVolumeStatus(volume, "available", CivoVolumeAvailableRetries*2)

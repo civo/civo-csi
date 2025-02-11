@@ -8,6 +8,8 @@ import (
 	"github.com/civo/civogo"
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestCreateVolume(t *testing.T) {
@@ -289,4 +291,151 @@ func TestGetCapacity(t *testing.T) {
 		assert.Equal(t, int64(0), resp.AvailableCapacity)
 	})
 
+}
+
+func TestControllerExpandVolume(t *testing.T) {
+
+	tests := []struct {
+		name           string
+		volumeID       string
+		capacityRange  *csi.CapacityRange
+		initialVolume  *civogo.Volume
+		expectedError  error
+		expectedSizeGB int64
+	}{
+		{
+			name:     "Successfully expand volume",
+			volumeID: "vol-123",
+			capacityRange: &csi.CapacityRange{
+				RequiredBytes: 20 * driver.BytesInGigabyte,
+			},
+			initialVolume: &civogo.Volume{
+				ID:            "vol-123",
+				SizeGigabytes: 10,
+				Status:        "available",
+			},
+			expectedError:  nil,
+			expectedSizeGB: 20,
+		},
+		{
+			name:     "Desired size not an exact multiple of BytesInGigabyte",
+			volumeID: "vol-123",
+			capacityRange: &csi.CapacityRange{
+				RequiredBytes: 20*driver.BytesInGigabyte + 1, // 20 GB + 1 byte
+			},
+			initialVolume: &civogo.Volume{
+				ID:             "vol-123",
+				SizeGigabytes:  10,
+				Status:         "available",
+			},
+			expectedError:  nil,
+			expectedSizeGB: 21, // Desired size should be rounded up to 21 GB
+		},
+		{
+			name:     "Volume ID is missing",
+			volumeID: "",
+			capacityRange: &csi.CapacityRange{
+				RequiredBytes: 20 * driver.BytesInGigabyte,
+			},
+			initialVolume:  nil,
+			expectedError:  status.Error(codes.InvalidArgument, "must provide a VolumeId to ControllerExpandVolume"),
+			expectedSizeGB: 0,
+		},
+		{
+			name:          "Capacity range is missing",
+			volumeID:      "vol-123",
+			capacityRange: nil,
+			initialVolume: &civogo.Volume{
+				ID:            "vol-123",
+				SizeGigabytes: 10,
+				Status:        "available",
+			},
+			expectedError:  status.Error(codes.InvalidArgument, "must provide a capacity range to ControllerExpandVolume"),
+			expectedSizeGB: 0,
+		},
+		{
+			name:     "Volume is already resizing",
+			volumeID: "vol-123",
+			capacityRange: &csi.CapacityRange{
+				RequiredBytes: 20 * driver.BytesInGigabyte,
+			},
+			initialVolume: &civogo.Volume{
+				ID:            "vol-123",
+				SizeGigabytes: 10,
+				Status:        "resizing",
+			},
+			expectedError:  status.Error(codes.Aborted, "volume is already being resized"),
+			expectedSizeGB: 0,
+		},
+		{
+			name:     "Volume is not available for expansion",
+			volumeID: "vol-123",
+			capacityRange: &csi.CapacityRange{
+				RequiredBytes: 20 * driver.BytesInGigabyte,
+			},
+			initialVolume: &civogo.Volume{
+				ID:            "vol-123",
+				SizeGigabytes: 10,
+				Status:        "attached",
+			},
+			expectedError:  status.Error(codes.FailedPrecondition, "volume is not in an availble state for OFFLINE expansion"),
+			expectedSizeGB: 0,
+		},
+		{
+			name:     "Desired size is smaller than current size",
+			volumeID: "vol-123",
+			capacityRange: &csi.CapacityRange{
+				RequiredBytes: 5 * driver.BytesInGigabyte,
+			},
+			initialVolume: &civogo.Volume{
+				ID:            "vol-123",
+				SizeGigabytes: 10,
+				Status:        "available",
+			},
+			expectedError:  nil,
+			expectedSizeGB: 10,
+		},
+		{
+			name:     "Failed to find the volume",
+			volumeID: "vol-123",
+			capacityRange: &csi.CapacityRange{
+				RequiredBytes: 20 * driver.BytesInGigabyte,
+			},
+			initialVolume: &civogo.Volume{
+				ID:            "vol-1234",
+				SizeGigabytes: 10,
+				Status:        "available",
+			},
+			expectedError:  status.Errorf(codes.Internal, "ControllerExpandVolume could not retrieve existing volume: ZeroMatchesError: unable to get volume vol-123"),
+			expectedSizeGB: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+
+			fc, _ := civogo.NewFakeClient()
+			d, _ := driver.NewTestDriver(fc)
+
+			// Populate the fake client with the initial volume
+			if tt.initialVolume != nil {
+				fc.Volumes = []civogo.Volume{*tt.initialVolume}
+			}
+
+			// Call the method under test
+			resp, err := d.ControllerExpandVolume(context.Background(), &csi.ControllerExpandVolumeRequest{
+				VolumeId:      tt.volumeID,
+				CapacityRange: tt.capacityRange,
+			})
+
+			// Assert the expected error
+			if tt.expectedError != nil {
+				assert.Equal(t, tt.expectedError, err)
+			} else {
+				assert.Nil(t, err)
+				assert.Equal(t, tt.expectedSizeGB*driver.BytesInGigabyte, resp.CapacityBytes)
+				assert.True(t, resp.NodeExpansionRequired)
+			}
+		})
+	}
 }
