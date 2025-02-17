@@ -963,7 +963,7 @@ func IsSnapshotReady(state string) bool {
 func ToCSISnapshot(snap *civogo.VolumeSnapshot)(*csi.Snapshot, error){
 	var creationTime *timestamppb.Timestamp
 	var err error
-	if snap.CreationTime != ""{
+	if strings.TrimSpace(snap.CreationTime) != ""{
 		creationTime, err = ParseTimeToProtoTimestamp(snap.CreationTime)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse creation time for snapshot %s: %w", snap.SnapshotID, err)
