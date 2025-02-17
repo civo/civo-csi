@@ -632,7 +632,7 @@ func (d *Driver) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequ
 		Str("source_volume_id", sourceVolID).
 		Msg("Finding current snapshot in Civo API")
 
-	snapshots, err := d.CivoClient.ListVolumeSnapshotsByVolumeID(sourceVolID)
+	snapshots, err := d.CivoClient.ListVolumeSnapshots()
 	if err != nil {
 		log.Error().
 			Str("source_volume_id", sourceVolID).
@@ -769,7 +769,7 @@ func (d *Driver) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsReques
 
 		snapshot, err := d.CivoClient.GetVolumeSnapshotByVolumeID(sourceVolumeID, snapshotID)
 		if err != nil {
-			if strings.Contains(err.Error(), "DatabaseSnapshotNotFoundError") {
+			if strings.Contains(err.Error(), "DatabaseSnapshotNotFoundError") ||  strings.Contains(err.Error(), "ZeroMatchesError"){
 				log.Info().
 					Str("snapshot_id", snapshotID).
 					Str("source_volume_id", sourceVolumeID).
@@ -807,7 +807,7 @@ func (d *Driver) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsReques
 
 		snapshot, err := d.CivoClient.GetVolumeSnapshot(snapshotID)
 		if err != nil {
-			if strings.Contains(err.Error(), "DatabaseSnapshotNotFoundError") {
+			if strings.Contains(err.Error(), "DatabaseSnapshotNotFoundError") || strings.Contains(err.Error(), "ZeroMatchesError"){
 				log.Info().
 					Str("snapshot_id", snapshotID).
 					Msg("ListSnapshots: no snapshot found, returning with success")
@@ -940,6 +940,9 @@ func ConvertSnapshot(in *civogo.VolumeSnapshot) (*csi.ListSnapshotsResponse_Entr
 
 // ParseTimeToProtoTimestamp parses a time string in RFC3339 format to *timestamppb.Timestamp.
 func ParseTimeToProtoTimestamp(timeStr string) (*timestamppb.Timestamp, error) {
+	if timeStr == ""{
+		return nil, nil
+	}
     t, err := time.Parse(time.RFC3339, timeStr)
 	// Only return an error if timeStr is not empty
     if err != nil && timeStr != "" {
