@@ -930,7 +930,7 @@ func getVolSizeInBytes(capRange *csi.CapacityRange) (int64, error) {
 func ConvertSnapshot(in *civogo.VolumeSnapshot) (*csi.ListSnapshotsResponse_Entry, error) {
 	snap, err := ToCSISnapshot(in)
 	if err != nil{
-		return nil, fmt.Errorf("filed to convert civo snapshot %s to csi snapshot: %v", in.SnapshotID, err)
+		return nil, fmt.Errorf("failed to convert civo snapshot %s to csi snapshot: %v", in.SnapshotID, err)
 	}
 
 	return &csi.ListSnapshotsResponse_Entry{
@@ -940,11 +940,12 @@ func ConvertSnapshot(in *civogo.VolumeSnapshot) (*csi.ListSnapshotsResponse_Entr
 
 // ParseTimeToProtoTimestamp parses a time string in RFC3339 format to *timestamppb.Timestamp.
 func ParseTimeToProtoTimestamp(timeStr string) (*timestamppb.Timestamp, error) {
-	t, err := time.Parse(time.RFC3339, timeStr)
-	if err != nil {
-		return nil, err
-	}
-	return timestamppb.New(t), nil
+    t, err := time.Parse(time.RFC3339, timeStr)
+	// Only return an error if timeStr is not empty
+    if err != nil && timeStr != "" {
+        return nil, err
+    }
+    return timestamppb.New(t), nil
 }
 
 // IsSnapshotReady determines if a snapshot is ready for use
@@ -961,13 +962,9 @@ func IsSnapshotReady(state string) bool {
 
 
 func ToCSISnapshot(snap *civogo.VolumeSnapshot)(*csi.Snapshot, error){
-	var creationTime *timestamppb.Timestamp
-	var err error
-	if strings.TrimSpace(snap.CreationTime) != ""{
-		creationTime, err = ParseTimeToProtoTimestamp(snap.CreationTime)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse creation time for snapshot %s: %w", snap.SnapshotID, err)
-		}
+	creationTime, err := ParseTimeToProtoTimestamp(snap.CreationTime)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse creation time for snapshot %s: %w", snap.SnapshotID, err)
 	}
 
 	// Explicitly define which state indicates the snapshot is ready for use
