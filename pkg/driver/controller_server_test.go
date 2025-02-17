@@ -290,3 +290,62 @@ func TestGetCapacity(t *testing.T) {
 	})
 
 }
+
+func TestConvertSnapshot(t *testing.T) {
+	creationTime := "2024-02-12T10:00:00Z"
+	expectedTime, _ := driver.ParseTimeToProtoTimestamp(creationTime)
+	tests := []struct {
+		name          string
+		input         *civogo.VolumeSnapshot
+		expected      *csi.ListSnapshotsResponse_Entry
+		expectedError bool
+	}{
+		{
+			name: "Valid Snapshot Conversion",
+			input: &civogo.VolumeSnapshot{
+				SnapshotID:       "snap-123",
+				VolumeID:         "vol-123",
+				SourceVolumeName: "vol1",
+				RestoreSize:      1024,
+				State:            "Available",
+				CreationTime:     creationTime,
+			},
+			expected: &csi.ListSnapshotsResponse_Entry{
+				Snapshot: &csi.Snapshot{
+					SnapshotId:     "snap-123",
+					SourceVolumeId: "vol-123",
+					SizeBytes:      1024,
+					ReadyToUse:     true, 
+					CreationTime: expectedTime,
+				},
+			},
+			expectedError: false,
+		},
+		{
+			name: "Invalid Creation Time",
+			input: &civogo.VolumeSnapshot{
+				SnapshotID:       "snap-456",
+				VolumeID:         "vol-456",
+				RestoreSize:      2048,
+				State:            "creating",
+				CreationTime:     "invalid-time",
+			},
+			expected:      nil,
+			expectedError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := driver.ConvertSnapshot(tt.input)
+
+			if (err != nil) != tt.expectedError {
+				t.Errorf("convertSnapshot() error = %v, expectedError %v", err, tt.expectedError)
+			}
+
+			if err == nil && !assert.Equal(t, result, tt.expected) {
+				t.Errorf("Got:\n%v\n\n, expected:\n%v\n\n", result, tt.expected)
+			}
+		})
+	}
+}

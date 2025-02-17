@@ -647,7 +647,7 @@ func (d *Driver) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequ
 			continue
 		}
 		if snapshot.VolumeID == sourceVolID {
-			snap, err := toCSISnapshot(&snapshot)
+			snap, err := ToCSISnapshot(&snapshot)
 			if err != nil{
 				log.Error().
 					Str("snapshot_name", snapshotName).
@@ -704,7 +704,7 @@ func (d *Driver) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequ
 		return nil, status.Error(codes.Internal, fmt.Sprintf("failed to parse creation time: %v", err))
 	}
 
-	isReady := isSnapshotReady(snapshot.State)
+	isReady := IsSnapshotReady(snapshot.State)
 
 	return &csi.CreateSnapshotResponse{
 		Snapshot: &csi.Snapshot{
@@ -783,7 +783,7 @@ func (d *Driver) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsReques
 				Msg("Failed to list snapshot from Civo API")
 			return nil, status.Errorf(codes.Internal, "failed to list snapshot %q: %v", snapshotID, err)
 		}
-		entry, err := convertSnapshot(snapshot)
+		entry, err := ConvertSnapshot(snapshot)
 		if err != nil {
 			log.Error().
 				Err(err).
@@ -820,7 +820,7 @@ func (d *Driver) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsReques
 			return nil, status.Errorf(codes.Internal, "failed to list snapshot %q: %v", snapshotID, err)
 		}
 
-		entry, err := convertSnapshot(snapshot)
+		entry, err := ConvertSnapshot(snapshot)
 		if err != nil {
 			log.Error().
 				Err(err).
@@ -854,7 +854,7 @@ func (d *Driver) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsReques
 		entries := []*csi.ListSnapshotsResponse_Entry{}
 		for _, snapshot := range snapshots {
 			if snapshot.VolumeID == sourceVolumeID {
-				entry, err := convertSnapshot(&snapshot)
+				entry, err := ConvertSnapshot(&snapshot)
 				if err != nil {
 					log.Error().
 						Err(err).
@@ -890,7 +890,7 @@ func (d *Driver) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsReques
 	entries := []*csi.ListSnapshotsResponse_Entry{}
 
 	for _, snap := range snapshots {
-		entry, err := convertSnapshot(&snap)
+		entry, err := ConvertSnapshot(&snap)
 		if err != nil {
 			log.Error().
 				Err(err).
@@ -926,9 +926,9 @@ func getVolSizeInBytes(capRange *csi.CapacityRange) (int64, error) {
 	return bytes, nil
 }
 
-// convertSnapshot function converts a civogo.Snapshot object(API response) into a CSI ListSnapshotsResponse_Entry
-func convertSnapshot(in *civogo.VolumeSnapshot) (*csi.ListSnapshotsResponse_Entry, error) {
-	snap, err := toCSISnapshot(in)
+// ConvertSnapshot function converts a civogo.Snapshot object(API response) into a CSI ListSnapshotsResponse_Entry
+func ConvertSnapshot(in *civogo.VolumeSnapshot) (*csi.ListSnapshotsResponse_Entry, error) {
+	snap, err := ToCSISnapshot(in)
 	if err != nil{
 		return nil, fmt.Errorf("filed to convert civo snapshot %s to csi snapshot: %v", in.SnapshotID, err)
 	}
@@ -947,31 +947,37 @@ func ParseTimeToProtoTimestamp(timeStr string) (*timestamppb.Timestamp, error) {
 	return timestamppb.New(t), nil
 }
 
-// isSnapshotReady determines if a snapshot is ready for use
-func isSnapshotReady(state string) bool {
+// IsSnapshotReady determines if a snapshot is ready for use
+func IsSnapshotReady(state string) bool {
 	// Define the states that indicate the snapshot is ready
 	readyStates := map[string]bool{
 		"Ready":     true,
 		"Available": true, // Add other states if applicable
 	}
-	return readyStates[state]
+	// Check if the state exists in the map, return false if not found
+	_, exists := readyStates[state]
+	return exists
 }
 
 
-func toCSISnapshot(snap *civogo.VolumeSnapshot)(*csi.Snapshot, error){
-	creationTime, err := ParseTimeToProtoTimestamp(snap.CreationTime)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse creation time for snapshot %s: %w", snap.SnapshotID, err)
+func ToCSISnapshot(snap *civogo.VolumeSnapshot)(*csi.Snapshot, error){
+	var creationTime *timestamppb.Timestamp
+	var err error
+	if snap.CreationTime != ""{
+		creationTime, err = ParseTimeToProtoTimestamp(snap.CreationTime)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse creation time for snapshot %s: %w", snap.SnapshotID, err)
+		}
 	}
 
 	// Explicitly define which state indicates the snapshot is ready for use
-	isReady := isSnapshotReady(snap.State)
+	isReady := IsSnapshotReady(snap.State)
 
 	return &csi.Snapshot{
 		SnapshotId:     snap.SnapshotID,
-			SourceVolumeId: snap.VolumeID,
-			CreationTime:   creationTime,
-			SizeBytes:      int64(snap.RestoreSize),
-			ReadyToUse:     isReady,
+		SourceVolumeId: snap.VolumeID,
+		CreationTime:   creationTime,
+		SizeBytes:      int64(snap.RestoreSize),
+		ReadyToUse:     isReady,
 	}, nil
 }
