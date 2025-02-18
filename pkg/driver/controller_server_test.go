@@ -8,6 +8,8 @@ import (
 	"github.com/civo/civogo"
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestCreateVolume(t *testing.T) {
@@ -289,6 +291,201 @@ func TestGetCapacity(t *testing.T) {
 		assert.Equal(t, int64(0), resp.AvailableCapacity)
 	})
 
+}
+
+func TestCreateSnapshot(t *testing.T){
+	tests := []struct {
+		name            string
+		req  			*csi.CreateSnapshotRequest
+		sourceVolume    *civogo.Volume
+		volSnapshots	[]civogo.VolumeSnapshot
+		expectedError   error
+		expectedResp 	*csi.CreateSnapshotResponse
+	}{
+		{
+			name: "snapshot name missing",
+			req: &csi.CreateSnapshotRequest{
+				Name: "snapshot-vol-1",
+				SourceVolumeId: "vol-1",
+			},
+			sourceVolume: &civogo.Volume{
+				ID: "vol-1",
+			},
+			volSnapshots: []civogo.VolumeSnapshot{
+				{
+					Name: "snapshot-vol-1",
+					VolumeID: "vol-x",
+				},
+			},
+			expectedError: status.Error(codes.AlreadyExists, "snapshot with the same name \"snapshot-vol-1\" but with different SourceVolumeId already exist"),
+			expectedResp: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fc, _ := civogo.NewFakeClient()
+			fc.Volumes = []civogo.Volume{*tt.sourceVolume}
+			fc.VolumeSnapshots = tt.volSnapshots
+
+
+			d, _ := driver.NewTestDriver(fc)
+
+			resp, err := d.CreateSnapshot(context.Background(), tt.req)
+
+			if tt.expectedError != nil {
+				assert.Nil(t, resp)
+				assert.Equal(t, tt.expectedError, err)
+			} else {
+				assert.Nil(t, err)
+				assert.Equal(t, tt.expectedResp, resp)
+			}
+		})
+	}
+	
+}
+
+func TestListSnapshots(t *testing.T) {
+	tests := []struct {
+		name          string
+		req           *csi.ListSnapshotsRequest
+		snapshots     []civogo.VolumeSnapshot
+		expectedError error
+		expectedResp  *csi.ListSnapshotsResponse
+	}{
+		{
+			name: "No snapshots found",
+			req:  &csi.ListSnapshotsRequest{},
+			snapshots: []civogo.VolumeSnapshot{},
+			expectedResp: &csi.ListSnapshotsResponse{
+				Entries: []*csi.ListSnapshotsResponse_Entry{},
+			},
+		},
+		{
+			name: "starting token provided",
+			req:  &csi.ListSnapshotsRequest{
+				StartingToken: "12",
+			},
+			snapshots: []civogo.VolumeSnapshot{},
+			expectedError: status.Error(codes.Aborted, "starting-token not supported"),
+			expectedResp: nil,
+		},
+		{
+			name: "Both snapshotID and sourceVolumeID given",
+			req:  &csi.ListSnapshotsRequest{
+				SnapshotId: "snap-1",
+				SourceVolumeId: "vol-1",
+			},
+			snapshots: []civogo.VolumeSnapshot{
+				{SnapshotID: "snap-1", VolumeID: "vol-1"},
+			},
+			expectedResp: &csi.ListSnapshotsResponse{
+				Entries: []*csi.ListSnapshotsResponse_Entry{
+					{Snapshot: &csi.Snapshot{SnapshotId: "snap-1", SourceVolumeId: "vol-1"}},
+				},
+			},
+		},
+		{
+			name: "Only snapshotID given",
+			req:  &csi.ListSnapshotsRequest{
+				SnapshotId: "snap-1",
+			},
+			snapshots: []civogo.VolumeSnapshot{
+				{SnapshotID: "snap-1", VolumeID: "vol-1"},
+			},
+			expectedResp: &csi.ListSnapshotsResponse{
+				Entries: []*csi.ListSnapshotsResponse_Entry{
+					{Snapshot: &csi.Snapshot{SnapshotId: "snap-1", SourceVolumeId: "vol-1"}},
+				},
+			},
+		},
+		{
+			name: "non-existing snapshotID given",
+			req:  &csi.ListSnapshotsRequest{
+				SnapshotId: "snap-2",
+			},
+			snapshots: []civogo.VolumeSnapshot{
+				{SnapshotID: "snap-1", VolumeID: "vol-1"},
+			},
+			expectedResp: &csi.ListSnapshotsResponse{},
+		},
+		{
+			name: "Only sourceVolumeID having single snapshot given",
+			req:  &csi.ListSnapshotsRequest{
+				SourceVolumeId: "vol-1",
+			},
+			snapshots: []civogo.VolumeSnapshot{
+				{SnapshotID: "snap-1", VolumeID: "vol-1"},
+			},
+			expectedResp: &csi.ListSnapshotsResponse{
+				Entries: []*csi.ListSnapshotsResponse_Entry{
+					{Snapshot: &csi.Snapshot{SnapshotId: "snap-1", SourceVolumeId: "vol-1"}},
+				},
+			},
+		},
+		{
+			name: "Only sourceVolumeID having multiple snapshots given",
+			req:  &csi.ListSnapshotsRequest{
+				SourceVolumeId: "vol-1",
+			},
+			snapshots: []civogo.VolumeSnapshot{
+				{SnapshotID: "snap-1", VolumeID: "vol-1"},
+				{SnapshotID: "snap-2", VolumeID: "vol-1"},
+				{SnapshotID: "snap-3", VolumeID: "vol-1"},
+			},
+			expectedResp: &csi.ListSnapshotsResponse{
+				Entries: []*csi.ListSnapshotsResponse_Entry{
+					{Snapshot: &csi.Snapshot{SnapshotId: "snap-1", SourceVolumeId: "vol-1"}},
+					{Snapshot: &csi.Snapshot{SnapshotId: "snap-2", SourceVolumeId: "vol-1"}},
+					{Snapshot: &csi.Snapshot{SnapshotId: "snap-3", SourceVolumeId: "vol-1"}},
+				},
+			},
+		},
+		{
+			name: "Multiple snapshots found",
+			req:  &csi.ListSnapshotsRequest{},
+			snapshots: []civogo.VolumeSnapshot{
+				{SnapshotID: "snap-2", VolumeID: "vol-2"},
+				{SnapshotID: "snap-1", VolumeID: "vol-1"},
+			},
+			expectedResp: &csi.ListSnapshotsResponse{
+				Entries: []*csi.ListSnapshotsResponse_Entry{
+					{Snapshot: &csi.Snapshot{SnapshotId: "snap-1", SourceVolumeId: "vol-1"}},
+					{Snapshot: &csi.Snapshot{SnapshotId: "snap-2", SourceVolumeId: "vol-2"}},
+				},
+			},
+		},
+		{
+			name: "Empty snapshot creationTime",
+			req:  &csi.ListSnapshotsRequest{},
+			snapshots: []civogo.VolumeSnapshot{
+				{SnapshotID: "snap-1", VolumeID: "vol-1", CreationTime: ""},
+			},
+			expectedResp: &csi.ListSnapshotsResponse{
+				Entries: []*csi.ListSnapshotsResponse_Entry{
+					{Snapshot: &csi.Snapshot{SnapshotId: "snap-1", SourceVolumeId: "vol-1"}},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fc, _ := civogo.NewFakeClient()
+			fc.VolumeSnapshots = tt.snapshots
+
+			d, _ := driver.NewTestDriver(fc)
+
+			resp, err := d.ListSnapshots(context.Background(), tt.req)
+
+			if tt.expectedError != nil {
+				assert.Equal(t, tt.expectedError, err)
+			} else {
+				assert.Nil(t, err)
+				assert.Equal(t, tt.expectedResp, resp)
+			}
+		})
+	}
 }
 
 func TestConvertSnapshot(t *testing.T) {
