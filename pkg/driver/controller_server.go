@@ -72,7 +72,6 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 			log.Debug().Str("volume_id", v.ID).Msg("Volume already exists")
 			if v.SizeGigabytes != int(desiredSize) {
 				return nil, status.Error(codes.AlreadyExists, "Volume already exists with a differnt size")
-
 			}
 
 			available, err := d.waitForVolumeStatus(&v, "available", CivoVolumeAvailableRetries)
@@ -471,7 +470,6 @@ func (d *Driver) ControllerExpandVolume(ctx context.Context, req *csi.Controller
 		CapacityBytes:         int64(volume.SizeGigabytes) * BytesInGigabyte,
 		NodeExpansionRequired: true,
 	}, nil
-
 }
 
 // ControllerGetVolume is for optional Kubernetes health checking of volumes and we don't support it yet

@@ -18,8 +18,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const Image = "dmajrekar/civo-csi"
-const TestClusterName = "csi-e2e-test"
+const (
+	Image           = "dmajrekar/civo-csi"
+	TestClusterName = "csi-e2e-test"
+)
 
 var CivoRegion, CivoURL string
 
@@ -36,6 +38,7 @@ type E2ETest struct {
 func init() {
 	flag.BoolVar(&retainClusters, "retain", false, "Retain the created cluster(s) on failure. (Clusters are always cleaned up on success.) Ignored if -kubeconfig is specified.")
 }
+
 func TestMain(m *testing.M) {
 	flag.Parse()
 
@@ -131,7 +134,6 @@ func TestMain(m *testing.M) {
 	e2eTest.cleanUpCluster()
 
 	os.Exit(exitCode)
-
 }
 
 func (e *E2ETest) provisionCluster() {

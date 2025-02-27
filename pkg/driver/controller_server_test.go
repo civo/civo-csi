@@ -290,11 +290,9 @@ func TestGetCapacity(t *testing.T) {
 
 		assert.Equal(t, int64(0), resp.AvailableCapacity)
 	})
-
 }
 
 func TestControllerExpandVolume(t *testing.T) {
-
 	tests := []struct {
 		name           string
 		volumeID       string
@@ -324,9 +322,9 @@ func TestControllerExpandVolume(t *testing.T) {
 				RequiredBytes: 20*driver.BytesInGigabyte + 1, // 20 GB + 1 byte
 			},
 			initialVolume: &civogo.Volume{
-				ID:             "vol-123",
-				SizeGigabytes:  10,
-				Status:         "available",
+				ID:            "vol-123",
+				SizeGigabytes: 10,
+				Status:        "available",
 			},
 			expectedError:  nil,
 			expectedSizeGB: 21, // Desired size should be rounded up to 21 GB
@@ -413,7 +411,6 @@ func TestControllerExpandVolume(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-
 			fc, _ := civogo.NewFakeClient()
 			d, _ := driver.NewTestDriver(fc)
 

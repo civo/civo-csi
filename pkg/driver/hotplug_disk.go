@@ -110,13 +110,13 @@ func (p *RealDiskHotPlugger) Mount(path, mountpoint, filesystem string, flags ..
 	if filesystem == "" {
 		// Bind-mount requires a file to bind to
 		log.Debug().Str("path", path).Str("mountpoint", mountpoint).Msg("Bind mounting filesystem, making parent folder")
-		err := os.MkdirAll(filepath.Dir(mountpoint), 0750)
+		err := os.MkdirAll(filepath.Dir(mountpoint), 0o750)
 		if err != nil {
 			return fmt.Errorf("creating mountpoint containing folder failed: %v", err)
 		}
 
 		log.Debug().Str("mountpoint", mountpoint).Msg("Making bind-mount file")
-		file, err := os.OpenFile(mountpoint, os.O_CREATE, 0660)
+		file, err := os.OpenFile(mountpoint, os.O_CREATE, 0o660)
 		if err != nil {
 			return fmt.Errorf("failed to create target file for raw block bind mount: %v", err)
 		}
@@ -125,7 +125,7 @@ func (p *RealDiskHotPlugger) Mount(path, mountpoint, filesystem string, flags ..
 		// Block mounts require a folder to mount to
 		log.Debug().Str("mountpoint", mountpoint).Msg("Device mounting - ensuring folder exists")
 
-		err := os.MkdirAll(mountpoint, 0750)
+		err := os.MkdirAll(mountpoint, 0o750)
 		if err != nil {
 			return fmt.Errorf("creating mountpoint failed: %v", err)
 		}
