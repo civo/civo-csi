@@ -14,9 +14,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-var (
-	versionInfo = flag.Bool("version", false, "Print the driver version")
-)
+var versionInfo = flag.Bool("version", false, "Print the driver version")
 
 func main() {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix

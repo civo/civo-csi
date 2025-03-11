@@ -112,5 +112,4 @@ func Test_ExistingCivoVolume(t *testing.T) {
 
 	t.Log("Wait for deployment to become ready")
 	g.Eventually(deployStateFunc(context.TODO(), e2eTest.tenantClient, g, deployment), "3m", "5s").Should(Equal("ready"))
-
 }
