@@ -398,6 +398,13 @@ spec:
               mountPath: /registration
         - name: civo-csi-plugin
           image: gcr.io/consummate-yew-302509/csi:latest
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - unbuffer /app/civo-csi pre-stop > /proc/1/fd/1
           env:
             - name: CIVO_API_KEY
               valueFrom:
