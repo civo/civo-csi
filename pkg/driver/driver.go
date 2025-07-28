@@ -35,12 +35,13 @@ type Driver struct {
 	DiskHotPlugger DiskHotPlugger
 	controller     bool
 	SocketFilename string
-	NodeInstanceID string
-	Region         string
-	Namespace      string
-	ClusterID      string
-	TestMode       bool
-	grpcServer     *grpc.Server
+	// NodeInstanceID string
+	Region            string
+	Namespace         string
+	ClusterID         string
+	TestMode          bool
+	grpcServer        *grpc.Server
+	ClusterVolumeType string
 }
 
 // NewDriver returns a CSI driver that implements gRPC endpoints for CSI
@@ -94,7 +95,7 @@ func NewTestDriver(fc *civogo.FakeClient) (*Driver, error) {
 
 	d.DiskHotPlugger = &FakeDiskHotPlugger{}
 	d.TestMode = true // Just stops so much logging out of failures, as they are often expected during the tests
-
+	d.ClusterVolumeType = "standard"
 	zerolog.SetGlobalLevel(zerolog.PanicLevel)
 
 	return d, err

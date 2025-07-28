@@ -39,6 +39,13 @@ func main() {
 
 	log.Info().Interface("d", d).Msg("Created a new driver")
 
+	log.Debug().Msg("Determining volumeType of cluster")
+	cluster, err := d.CivoClient.GetKubernetesCluster(d.ClusterID)
+	if err != nil {
+		log.Fatal().Err(err)
+	}
+	d.ClusterVolumeType = cluster.VolumeType
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
