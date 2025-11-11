@@ -20,8 +20,9 @@ const BytesInGigabyte int64 = 1024 * 1024 * 1024
 const CivoVolumeAvailableRetries int = 20
 
 var supportedAccessModes = map[csi.VolumeCapability_AccessMode_Mode]struct{}{
-	csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER:      {},
-	csi.VolumeCapability_AccessMode_SINGLE_NODE_READER_ONLY: {},
+	csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER:        {},
+	csi.VolumeCapability_AccessMode_SINGLE_NODE_SINGLE_WRITER: {},
+	csi.VolumeCapability_AccessMode_SINGLE_NODE_READER_ONLY:   {},
 }
 
 // CreateVolume is the first step when a PVC tries to create a dynamic volume
