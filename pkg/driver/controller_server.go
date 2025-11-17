@@ -41,6 +41,7 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 
 	// Check capabilities
 	for _, cap := range req.VolumeCapabilities {
+		fmt.Println(cap.GetAccessMode().GetMode())
 		if _, ok := supportedAccessModes[cap.GetAccessMode().GetMode()]; !ok {
 			return nil, status.Error(codes.InvalidArgument, "CreateVolume access mode isn't supported")
 		}
