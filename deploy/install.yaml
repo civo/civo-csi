@@ -238,7 +238,7 @@ spec:
       serviceAccount: civo-csi-controller-sa
       containers:
         - name: csi-provisioner
-          image: k8s.gcr.io/sig-storage/csi-provisioner:v2.2.0
+          image: k8s.gcr.io/sig-storage/csi-provisioner:v6.0.0
           args:
             - "--csi-address=$(ADDRESS)"
             - "--default-fstype=ext4"
@@ -252,7 +252,7 @@ spec:
             - name: socket-dir
               mountPath: /var/lib/kubelet/plugins/csi.civo.com
         - name: csi-attacher
-          image: k8s.gcr.io/sig-storage/csi-attacher:v3.1.0
+          image: k8s.gcr.io/sig-storage/csi-attacher:v4.10.0
           args:
             - "--csi-address=$(ADDRESS)"
             - "--timeout=30s"
@@ -265,7 +265,7 @@ spec:
             - name: socket-dir
               mountPath: /var/lib/kubelet/plugins/csi.civo.com
         - name: csi-resizer
-          image: k8s.gcr.io/sig-storage/csi-resizer:v1.4.0
+          image: k8s.gcr.io/sig-storage/csi-resizer:v2.0.0
           args:
             - "--v=5"
             - "--csi-address=$(ADDRESS)"
@@ -278,7 +278,7 @@ spec:
             - name: socket-dir
               mountPath: /var/lib/kubelet/plugins/csi.civo.com
         - name: csi-snapshotter
-          image: k8s.gcr.io/sig-storage/csi-snapshotter:v8.1.0
+          image: k8s.gcr.io/sig-storage/csi-snapshotter:v8.4.0
           args:
             - "--v=5"
             - "--csi-address=$(ADDRESS)"
@@ -363,7 +363,7 @@ spec:
         operator: Exists
       containers:
         - name: csi-driver-registrar
-          image: k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.5.1
+          image: k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.15.0
           args:
             - "--v=5"
             - "--csi-address=/csi/csi.sock"
