@@ -14,6 +14,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/singleflight"
 	"google.golang.org/grpc"
 )
 
@@ -42,6 +43,15 @@ type Driver struct {
 	TestMode          bool
 	grpcServer        *grpc.Server
 	ClusterVolumeType string
+
+	// volumeCreateGroup coalesces concurrent CreateVolume gRPC handlers for
+	// the same req.Name in this pod into a single call into the Civo API.
+	// CSI external-provisioner retries the gRPC call on transient errors;
+	// without coalescing, two retries can both do the (ListVolumes +
+	// NewVolume) sequence in parallel and end up creating duplicate
+	// CivoVolume CRs. Per-name singleflight is sufficient because the
+	// controller deployment is replicas: 1.
+	volumeCreateGroup singleflight.Group
 }
 
 // NewDriver returns a CSI driver that implements gRPC endpoints for CSI

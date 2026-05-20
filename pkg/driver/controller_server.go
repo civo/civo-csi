@@ -2,6 +2,7 @@ package driver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -25,7 +26,13 @@ var supportedAccessModes = map[csi.VolumeCapability_AccessMode_Mode]struct{}{
 	csi.VolumeCapability_AccessMode_SINGLE_NODE_READER_ONLY:   {},
 }
 
-// CreateVolume is the first step when a PVC tries to create a dynamic volume
+// CreateVolume is the first step when a PVC tries to create a dynamic volume.
+//
+// Concurrent gRPC handlers for the same req.Name (CSI external-provisioner
+// retries on transient errors) are coalesced via a per-name singleflight
+// group, so that exactly one (ListVolumes + NewVolume) sequence is in flight
+// per logical volume in this pod. All callers receive the same response,
+// satisfying the CSI spec's idempotency requirement for CreateVolume.
 func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
 	log.Info().Msg("Request: CreateVolume")
 
@@ -39,7 +46,8 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 
 	log.Info().Str("name", req.Name).Interface("capabilities", req.VolumeCapabilities).Msg("Creating volume")
 
-	// Check capabilities
+	// Check capabilities (cheap, no API call — kept outside singleflight so
+	// invalid requests fail fast without blocking on an in-flight valid one).
 	for _, cap := range req.VolumeCapabilities {
 		if _, ok := supportedAccessModes[cap.GetAccessMode().GetMode()]; !ok {
 			return nil, status.Error(codes.InvalidArgument, "CreateVolume access mode isn't supported")
@@ -49,7 +57,7 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 		}
 	}
 
-	// Determine required size
+	// Determine required size.
 	bytes, err := getVolSizeInBytes(req.GetCapacityRange())
 	if err != nil {
 		return nil, err
@@ -62,6 +70,22 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 
 	log.Debug().Int64("size_gb", desiredSize).Msg("Volume size determined")
 
+	v, err, shared := d.volumeCreateGroup.Do(req.Name, func() (interface{}, error) {
+		return d.createVolumeUnsynced(ctx, req, desiredSize)
+	})
+	if err != nil {
+		return nil, err
+	}
+	if shared {
+		log.Debug().Str("name", req.Name).Msg("CreateVolume response shared with a concurrent retry (singleflight)")
+	}
+	return v.(*csi.CreateVolumeResponse), nil
+}
+
+// createVolumeUnsynced is the side-effectful body of CreateVolume. It must
+// only be invoked through d.volumeCreateGroup so concurrent retries for the
+// same req.Name are coalesced.
+func (d *Driver) createVolumeUnsynced(_ context.Context, req *csi.CreateVolumeRequest, desiredSize int64) (*csi.CreateVolumeResponse, error) {
 	log.Debug().Msg("Listing current volumes in Civo API")
 	volumes, err := d.CivoClient.ListVolumes()
 	if err != nil {
@@ -70,28 +94,7 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 	}
 	for _, v := range volumes {
 		if v.Name == req.Name {
-			log.Debug().Str("volume_id", v.ID).Msg("Volume already exists")
-			if v.SizeGigabytes != int(desiredSize) {
-				return nil, status.Error(codes.AlreadyExists, "Volume already exists with a differnt size")
-			}
-
-			available, err := d.waitForVolumeStatus(&v, "available", CivoVolumeAvailableRetries)
-			if err != nil {
-				log.Error().Err(err).Msg("Unable to wait for volume availability in Civo API")
-				return nil, err
-			}
-
-			if available {
-				return &csi.CreateVolumeResponse{
-					Volume: &csi.Volume{
-						VolumeId:      v.ID,
-						CapacityBytes: int64(v.SizeGigabytes) * BytesInGigabyte,
-					},
-				}, nil
-			}
-
-			log.Error().Str("status", v.Status).Msg("Civo Volume is not 'available'")
-			return nil, status.Errorf(codes.Unavailable, "Volume isn't available to be attached, state is currently %s", v.Status)
+			return d.resolveExistingVolume(v, desiredSize)
 		}
 	}
 
@@ -142,6 +145,18 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 	log.Debug().Msg("Creating volume in Civo API")
 	result, err := d.CivoClient.NewVolume(v)
 	if err != nil {
+		// If the Civo API rejects the create because a sibling request with
+		// the same name already won the race server-side (api-go #243), this
+		// CSI handler must still satisfy the idempotency contract: look the
+		// existing volume up by name and return it as a success.
+		if errors.Is(err, civogo.DatabaseVolumeDuplicateNameError) {
+			log.Info().Str("name", req.Name).Msg("Civo API reported a duplicate name; resolving idempotently")
+			resp, lookupErr := d.lookupExistingByName(req.Name, desiredSize)
+			if lookupErr == nil {
+				return resp, nil
+			}
+			log.Warn().Err(lookupErr).Str("name", req.Name).Msg("Idempotent lookup after duplicate-name failed; returning original error")
+		}
 		log.Error().Err(err).Msg("Unable to create volume in Civo API")
 		return nil, err
 	}
@@ -172,6 +187,52 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 
 	log.Error().Err(err).Msg("Civo Volume is not 'available'")
 	return nil, status.Errorf(codes.Unavailable, "Civo Volume %q is not \"available\", state currently is %q", volume.ID, volume.Status)
+}
+
+// resolveExistingVolume handles the "volume already exists with this name"
+// case found while listing — returns the existing volume as a successful
+// CreateVolumeResponse if the requested size matches and the volume is
+// available, or an appropriate error otherwise.
+func (d *Driver) resolveExistingVolume(v civogo.Volume, desiredSize int64) (*csi.CreateVolumeResponse, error) {
+	log.Debug().Str("volume_id", v.ID).Msg("Volume already exists")
+	if v.SizeGigabytes != int(desiredSize) {
+		return nil, status.Error(codes.AlreadyExists, "Volume already exists with a differnt size")
+	}
+
+	available, err := d.waitForVolumeStatus(&v, "available", CivoVolumeAvailableRetries)
+	if err != nil {
+		log.Error().Err(err).Msg("Unable to wait for volume availability in Civo API")
+		return nil, err
+	}
+
+	if available {
+		return &csi.CreateVolumeResponse{
+			Volume: &csi.Volume{
+				VolumeId:      v.ID,
+				CapacityBytes: int64(v.SizeGigabytes) * BytesInGigabyte,
+			},
+		}, nil
+	}
+
+	log.Error().Str("status", v.Status).Msg("Civo Volume is not 'available'")
+	return nil, status.Errorf(codes.Unavailable, "Volume isn't available to be attached, state is currently %s", v.Status)
+}
+
+// lookupExistingByName lists volumes and returns the one matching name as a
+// CreateVolumeResponse. Used to satisfy CSI idempotency when the Civo API
+// rejected our NewVolume call because a sibling request had already created
+// the volume server-side. Returns an error if no matching volume is found.
+func (d *Driver) lookupExistingByName(name string, desiredSize int64) (*csi.CreateVolumeResponse, error) {
+	volumes, err := d.CivoClient.ListVolumes()
+	if err != nil {
+		return nil, fmt.Errorf("list volumes for idempotent lookup: %w", err)
+	}
+	for _, v := range volumes {
+		if v.Name == name {
+			return d.resolveExistingVolume(v, desiredSize)
+		}
+	}
+	return nil, fmt.Errorf("volume %q not found in idempotent lookup after duplicate-name response", name)
 }
 
 // waitForVolumeAvailable will just sleep/loop waiting for Civo's API to report it's available, or hit a defined
