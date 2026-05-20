@@ -87,15 +87,11 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 // same req.Name are coalesced.
 func (d *Driver) createVolumeUnsynced(_ context.Context, req *csi.CreateVolumeRequest, desiredSize int64) (*csi.CreateVolumeResponse, error) {
 	log.Debug().Msg("Listing current volumes in Civo API")
-	volumes, err := d.CivoClient.ListVolumes()
-	if err != nil {
+	if resp, found, err := d.lookupExistingByName(req.Name, desiredSize); err != nil {
 		log.Error().Err(err).Msg("Unable to list volumes in Civo API")
 		return nil, err
-	}
-	for _, v := range volumes {
-		if v.Name == req.Name {
-			return d.resolveExistingVolume(v, desiredSize)
-		}
+	} else if found {
+		return resp, nil
 	}
 
 	// TODO: Uncomment after client implementation is complete.
@@ -151,11 +147,13 @@ func (d *Driver) createVolumeUnsynced(_ context.Context, req *csi.CreateVolumeRe
 		// existing volume up by name and return it as a success.
 		if errors.Is(err, civogo.DatabaseVolumeDuplicateNameError) {
 			log.Info().Str("name", req.Name).Msg("Civo API reported a duplicate name; resolving idempotently")
-			resp, lookupErr := d.lookupExistingByName(req.Name, desiredSize)
-			if lookupErr == nil {
+			if resp, found, lookupErr := d.lookupExistingByName(req.Name, desiredSize); lookupErr != nil {
+				log.Warn().Err(lookupErr).Str("name", req.Name).Msg("Idempotent lookup after duplicate-name failed; returning original error")
+			} else if found {
 				return resp, nil
+			} else {
+				log.Warn().Str("name", req.Name).Msg("Volume not found in idempotent lookup after duplicate-name response; returning original error")
 			}
-			log.Warn().Err(lookupErr).Str("name", req.Name).Msg("Idempotent lookup after duplicate-name failed; returning original error")
 		}
 		log.Error().Err(err).Msg("Unable to create volume in Civo API")
 		return nil, err
@@ -218,21 +216,30 @@ func (d *Driver) resolveExistingVolume(v civogo.Volume, desiredSize int64) (*csi
 	return nil, status.Errorf(codes.Unavailable, "Volume isn't available to be attached, state is currently %s", v.Status)
 }
 
-// lookupExistingByName lists volumes and returns the one matching name as a
-// CreateVolumeResponse. Used to satisfy CSI idempotency when the Civo API
-// rejected our NewVolume call because a sibling request had already created
-// the volume server-side. Returns an error if no matching volume is found.
-func (d *Driver) lookupExistingByName(name string, desiredSize int64) (*csi.CreateVolumeResponse, error) {
+// lookupExistingByName lists volumes and, if one matches the given name,
+// returns it as a CreateVolumeResponse. The "found" return distinguishes
+// "volume with this name exists" (true, resp may carry a resolve error)
+// from "no such volume" (false, resp == nil) so callers can act on each
+// case explicitly:
+//
+//   - The CreateVolume pre-check uses found=false to mean "no duplicate;
+//     proceed to create".
+//   - The duplicate-name error handler uses found=false to mean "lookup
+//     couldn't recover idempotently; return the original error".
+//
+// err is non-nil only when the underlying ListVolumes call itself failed.
+func (d *Driver) lookupExistingByName(name string, desiredSize int64) (*csi.CreateVolumeResponse, bool, error) {
 	volumes, err := d.CivoClient.ListVolumes()
 	if err != nil {
-		return nil, fmt.Errorf("list volumes for idempotent lookup: %w", err)
+		return nil, false, fmt.Errorf("list volumes for lookup: %w", err)
 	}
 	for _, v := range volumes {
 		if v.Name == name {
-			return d.resolveExistingVolume(v, desiredSize)
+			resp, rerr := d.resolveExistingVolume(v, desiredSize)
+			return resp, true, rerr
 		}
 	}
-	return nil, fmt.Errorf("volume %q not found in idempotent lookup after duplicate-name response", name)
+	return nil, false, nil
 }
 
 // waitForVolumeAvailable will just sleep/loop waiting for Civo's API to report it's available, or hit a defined
