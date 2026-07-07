@@ -200,3 +200,89 @@ func TestNodeGetVolumeStats(t *testing.T) {
 		assert.Equal(t, stats.UsedInodes, int64(7000))
 	})
 }
+
+func TestNodeExpandVolume(t *testing.T) {
+	volume := civogo.Volume{
+		ID:            "vol-123",
+		SizeGigabytes: 20,
+		Status:        "attached",
+	}
+
+	t.Run("Resizes the filesystem once the block device has grown", func(t *testing.T) {
+		fc, _ := civogo.NewFakeClient()
+		fc.Volumes = []civogo.Volume{volume}
+		d, _ := driver.NewTestDriver(fc)
+
+		hotPlugger := &driver.FakeDiskHotPlugger{
+			Formatted:       true,
+			DeviceSizeBytes: 20 * driver.BytesInGigabyte,
+		}
+		d.DiskHotPlugger = hotPlugger
+
+		resp, err := d.NodeExpandVolume(context.Background(), &csi.NodeExpandVolumeRequest{
+			VolumeId:      "vol-123",
+			VolumePath:    "/mnt/vol-123",
+			CapacityRange: &csi.CapacityRange{RequiredBytes: 20 * driver.BytesInGigabyte},
+		})
+		assert.Nil(t, err)
+		assert.NotNil(t, resp)
+		assert.True(t, hotPlugger.RescanCalled)
+		assert.True(t, hotPlugger.ExpandCalled)
+	})
+
+	t.Run("Returns a retryable error while the block device has not grown yet", func(t *testing.T) {
+		fc, _ := civogo.NewFakeClient()
+		fc.Volumes = []civogo.Volume{volume}
+		d, _ := driver.NewTestDriver(fc)
+
+		hotPlugger := &driver.FakeDiskHotPlugger{
+			Formatted:       true,
+			DeviceSizeBytes: 10 * driver.BytesInGigabyte,
+		}
+		d.DiskHotPlugger = hotPlugger
+
+		_, err := d.NodeExpandVolume(context.Background(), &csi.NodeExpandVolumeRequest{
+			VolumeId:      "vol-123",
+			VolumePath:    "/mnt/vol-123",
+			CapacityRange: &csi.CapacityRange{RequiredBytes: 20 * driver.BytesInGigabyte},
+		})
+		assert.Equal(t, codes.Aborted, status.Code(err))
+		assert.True(t, hotPlugger.RescanCalled)
+		assert.False(t, hotPlugger.ExpandCalled)
+	})
+
+	t.Run("Skips the device size check without a capacity range", func(t *testing.T) {
+		fc, _ := civogo.NewFakeClient()
+		fc.Volumes = []civogo.Volume{volume}
+		d, _ := driver.NewTestDriver(fc)
+
+		hotPlugger := &driver.FakeDiskHotPlugger{
+			Formatted: true,
+		}
+		d.DiskHotPlugger = hotPlugger
+
+		_, err := d.NodeExpandVolume(context.Background(), &csi.NodeExpandVolumeRequest{
+			VolumeId:   "vol-123",
+			VolumePath: "/mnt/vol-123",
+		})
+		assert.Nil(t, err)
+		assert.True(t, hotPlugger.ExpandCalled)
+	})
+
+	t.Run("Returns Not Found gRPC error if the disk isn't plugged in", func(t *testing.T) {
+		fc, _ := civogo.NewFakeClient()
+		fc.Volumes = []civogo.Volume{volume}
+		d, _ := driver.NewTestDriver(fc)
+
+		hotPlugger := &driver.FakeDiskHotPlugger{
+			DiskAttachmentMissing: true,
+		}
+		d.DiskHotPlugger = hotPlugger
+
+		_, err := d.NodeExpandVolume(context.Background(), &csi.NodeExpandVolumeRequest{
+			VolumeId:   "vol-123",
+			VolumePath: "/mnt/vol-123",
+		})
+		assert.Equal(t, codes.NotFound, status.Code(err))
+	})
+}
