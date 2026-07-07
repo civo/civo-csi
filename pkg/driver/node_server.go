@@ -320,6 +320,29 @@ func (d *Driver) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandVolume
 		return nil, status.Errorf(codes.NotFound, "path to volume (/dev/disk/by-id/%s) not found", req.VolumeId)
 	}
 
+	// The platform grows the disk while it stays attached (online expansion); rescan
+	// so the kernel picks up the new capacity. Best-effort: the hypervisor normally
+	// notifies the guest of the capacity change itself.
+	if err := d.DiskHotPlugger.RescanDevice(attachedDiskPath); err != nil {
+		log.Warn().Str("volume_id", req.VolumeId).Err(err).Msg("Failed to rescan device before expanding filesystem")
+	}
+
+	// Only resize the filesystem once the block device has actually grown to the
+	// requested capacity — the platform-side expansion is asynchronous. Returning a
+	// retryable error makes the kubelet call NodeExpandVolume again.
+	if req.GetCapacityRange() != nil {
+		requiredBytes := req.GetCapacityRange().GetRequiredBytes()
+		deviceSize, err := d.DiskHotPlugger.DeviceSize(attachedDiskPath)
+		if err != nil {
+			log.Error().Str("volume_id", req.VolumeId).Err(err).Msg("Failed to determine block device size")
+			return nil, status.Errorf(codes.Internal, "failed to determine size of block device %s: %s", attachedDiskPath, err)
+		}
+		if deviceSize < requiredBytes {
+			log.Info().Str("volume_id", req.VolumeId).Int64("device_size", deviceSize).Int64("required_bytes", requiredBytes).Msg("Block device has not grown to the requested capacity yet")
+			return nil, status.Errorf(codes.Aborted, "block device %s is %d bytes, expansion to %d bytes has not reached the node yet", attachedDiskPath, deviceSize, requiredBytes)
+		}
+	}
+
 	log.Info().Str("volume_id", req.VolumeId).Str("path", attachedDiskPath).Msg("Expanding Volume")
 	err = d.DiskHotPlugger.ExpandFilesystem(d.DiskHotPlugger.PathForVolume(req.VolumeId))
 	if err != nil {
