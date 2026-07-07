@@ -3,6 +3,8 @@ package driver
 import (
 	"errors"
 	"fmt"
+	"io"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -46,6 +48,12 @@ type DiskHotPlugger interface {
 
 	// GetStatistics returns capacity-related volume statistics for the given volume path.
 	GetStatistics(volumePath string) (VolumeStatistics, error)
+
+	// RescanDevice asks the kernel to re-read the capacity of the block device at the given path
+	RescanDevice(path string) error
+
+	// DeviceSize returns the size in bytes of the block device at the given path
+	DeviceSize(path string) (int64, error)
 }
 
 type RealDiskHotPlugger struct{}
@@ -80,6 +88,41 @@ func (p *RealDiskHotPlugger) ExpandFilesystem(path string) error {
 	}
 
 	return nil
+}
+
+// RescanDevice asks the kernel to re-read the capacity of the block device at the
+// given path, so a resize performed by the platform while the disk stays attached
+// (online expansion) becomes visible to the node.
+func (p *RealDiskHotPlugger) RescanDevice(path string) error {
+	log.Debug().Str("path", path).Msg("Rescanning device")
+
+	devicePath, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return fmt.Errorf("resolving device path %s failed: %v", path, err)
+	}
+
+	rescanPath := fmt.Sprintf("/sys/class/block/%s/device/rescan", filepath.Base(devicePath))
+	if err := os.WriteFile(rescanPath, []byte("1"), 0); err != nil {
+		return fmt.Errorf("rescanning device %s via %s failed: %v", devicePath, rescanPath, err)
+	}
+
+	return nil
+}
+
+// DeviceSize returns the size in bytes of the block device at the given path
+func (p *RealDiskHotPlugger) DeviceSize(path string) (int64, error) {
+	device, err := os.Open(path)
+	if err != nil {
+		return 0, fmt.Errorf("opening device %s failed: %v", path, err)
+	}
+	defer device.Close()
+
+	size, err := device.Seek(0, io.SeekEnd)
+	if err != nil {
+		return 0, fmt.Errorf("determining size of device %s failed: %v", path, err)
+	}
+
+	return size, nil
 }
 
 // Format erases the path with a new empty filesystem
@@ -275,6 +318,9 @@ type FakeDiskHotPlugger struct {
 	Formatted             bool
 	FormatCalled          bool
 	ExpandCalled          bool
+	RescanCalled          bool
+	DeviceSizeBytes       int64
+	DeviceSizeErr         error
 	Device                string
 	Mountpoint            string
 	Mounted               bool
@@ -307,6 +353,25 @@ func (p *FakeDiskHotPlugger) ExpandFilesystem(path string) error {
 	p.ExpandCalled = true
 
 	return nil
+}
+
+// RescanDevice asks the kernel to re-read the capacity of the block device at the given path
+func (p *FakeDiskHotPlugger) RescanDevice(path string) error {
+	p.RescanCalled = true
+	return nil
+}
+
+// DeviceSize returns the size in bytes of the block device at the given path.
+// When DeviceSizeBytes is unset (0) the device is treated as already large enough,
+// so only tests exercising the "device has not grown yet" case need to set it.
+func (p *FakeDiskHotPlugger) DeviceSize(path string) (int64, error) {
+	if p.DeviceSizeErr != nil {
+		return 0, p.DeviceSizeErr
+	}
+	if p.DeviceSizeBytes == 0 {
+		return math.MaxInt64, nil
+	}
+	return p.DeviceSizeBytes, nil
 }
 
 // Mount the path to the mountpoint, specifying the current filesystem and mount flags to use
