@@ -366,7 +366,7 @@ func TestControllerExpandVolume(t *testing.T) {
 			expectedSizeGB: 0,
 		},
 		{
-			name:     "Volume is not available for expansion",
+			name:     "Successfully expand attached volume online",
 			volumeID: "vol-123",
 			capacityRange: &csi.CapacityRange{
 				RequiredBytes: 20 * driver.BytesInGigabyte,
@@ -376,7 +376,21 @@ func TestControllerExpandVolume(t *testing.T) {
 				SizeGigabytes: 10,
 				Status:        "attached",
 			},
-			expectedError:  status.Error(codes.FailedPrecondition, "volume is not in an availble state for OFFLINE expansion"),
+			expectedError:  nil,
+			expectedSizeGB: 20,
+		},
+		{
+			name:     "Volume is not in an expandable state",
+			volumeID: "vol-123",
+			capacityRange: &csi.CapacityRange{
+				RequiredBytes: 20 * driver.BytesInGigabyte,
+			},
+			initialVolume: &civogo.Volume{
+				ID:            "vol-123",
+				SizeGigabytes: 10,
+				Status:        "detaching",
+			},
+			expectedError:  status.Error(codes.FailedPrecondition, `volume must be in an available or attached state to be expanded, state is currently "detaching"`),
 			expectedSizeGB: 0,
 		},
 		{
