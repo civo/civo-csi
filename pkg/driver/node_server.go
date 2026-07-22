@@ -88,23 +88,20 @@ func (d *Driver) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolu
 	}
 
 	log.Debug().Str("volume_id", req.VolumeId).Str("path", req.StagingTargetPath).Msg("Unmounting volume (unstaging)")
-	path := d.DiskHotPlugger.PathForVolume(req.VolumeId)
 
-	if path == "" && !d.TestMode {
-		log.Error().Str("volume_id", req.VolumeId).Msg("path to volume (/dev/disk/by-id/VOLUME_ID) not found")
-		return &csi.NodeUnstageVolumeResponse{}, nil
-	}
-
-	mounted, err := d.DiskHotPlugger.IsMounted(path)
+	mounted, err := d.DiskHotPlugger.IsMounted(req.StagingTargetPath)
 	if err != nil {
-		log.Error().Str("path", path).Err(err).Msg("Mounted check errored")
+		log.Error().Str("path", req.StagingTargetPath).Err(err).Msg("Mounted check errored")
 		return nil, err
 	}
 	log.Debug().Str("volume_id", req.VolumeId).Bool("mounted", mounted).Msg("Mounted check completed")
 
 	if mounted {
 		log.Debug().Str("volume_id", req.VolumeId).Bool("mounted", mounted).Msg("Unmounting")
-		d.DiskHotPlugger.Unmount(path)
+		if err := d.DiskHotPlugger.Unmount(req.StagingTargetPath); err != nil {
+			log.Error().Str("path", req.StagingTargetPath).Err(err).Msg("Failed to unmount staging target path")
+			return nil, err
+		}
 	}
 
 	return &csi.NodeUnstageVolumeResponse{}, nil
