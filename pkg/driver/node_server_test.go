@@ -88,13 +88,15 @@ func TestNodeStageVolume(t *testing.T) {
 }
 
 func TestNodeUnstageVolume(t *testing.T) {
-	t.Run("Unmount the volume", func(t *testing.T) {
+	t.Run("Unmounts the volume from the staging target path", func(t *testing.T) {
 		fc, _ := civogo.NewFakeClient()
 		d, _ := driver.NewTestDriver(fc)
 
+		// Represents a volume already staged (mounted) at the staging target path
 		hotPlugger := &driver.FakeDiskHotPlugger{
-			Formatted: true,
-			Mounted:   true,
+			Formatted:  true,
+			Mounted:    true,
+			Mountpoint: "/mnt/my-target",
 		}
 		d.DiskHotPlugger = hotPlugger
 
@@ -104,6 +106,7 @@ func TestNodeUnstageVolume(t *testing.T) {
 		})
 		assert.Nil(t, err)
 
+		assert.False(t, hotPlugger.Mounted)
 		mounted, _ := d.DiskHotPlugger.IsMounted("/mnt/my-target")
 		assert.False(t, mounted)
 	})
