@@ -508,8 +508,8 @@ func (d *Driver) ControllerExpandVolume(ctx context.Context, req *csi.Controller
 		return &csi.ControllerExpandVolumeResponse{CapacityBytes: int64(volume.SizeGigabytes) * BytesInGigabyte, NodeExpansionRequired: true}, nil
 	}
 
-	if volume.Status != "available" {
-		return nil, status.Error(codes.FailedPrecondition, "volume is not in an availble state for OFFLINE expansion")
+	if volume.Status != "available" && volume.Status != "attached" {
+		return nil, status.Errorf(codes.FailedPrecondition, "volume must be in an available or attached state to be expanded, state is currently %q", volume.Status)
 	}
 
 	log.Info().Int64("size_gb", desiredSize).Str("volume_id", volID).Msg("Volume resize request sent")
@@ -523,6 +523,20 @@ func (d *Driver) ControllerExpandVolume(ctx context.Context, req *csi.Controller
 		return nil, status.Errorf(codes.Internal, "cannot resize volume %s: %s", volID, err.Error())
 	}
 
+	// Attached volumes are expanded ONLINE (in place): the block device grows while
+	// staying attached, so the volume never returns to "available". Return straight
+	// away — NodeExpandVolume verifies the device has actually grown before resizing
+	// the filesystem.
+	if volume.Status == "attached" {
+		log.Info().Int64("size_gb", desiredSize).Str("volume_id", volID).Msg("Online volume resize requested")
+		return &csi.ControllerExpandVolumeResponse{
+			CapacityBytes:         desiredSize * BytesInGigabyte,
+			NodeExpansionRequired: true,
+		}, nil
+	}
+
+	// From here on the volume is "available", so this is an OFFLINE expansion:
+	// wait for the platform to finish resizing and the volume to become available again.
 	// Resizes can take a while, double the number of normal retries
 	available, err := d.waitForVolumeStatus(volume, "available", CivoVolumeAvailableRetries*2)
 	if err != nil {
