@@ -436,3 +436,53 @@ func TestControllerExpandVolume(t *testing.T) {
 		})
 	}
 }
+
+func TestControllerPublishVolumeStandalone(t *testing.T) {
+	t.Run("Publishes to a plain instance when no cluster id is configured", func(t *testing.T) {
+		fc, _ := civogo.NewFakeClient()
+		instanceID := "i-standalone"
+		fc.Instances = []civogo.Instance{{ID: instanceID, Hostname: "node-1"}}
+		d, _ := driver.NewTestDriver(fc)
+		d.ClusterID = ""
+
+		volume, err := d.CivoClient.NewVolume(&civogo.VolumeConfig{Name: "standalone"})
+		assert.Nil(t, err)
+
+		_, err = d.ControllerPublishVolume(context.Background(), &csi.ControllerPublishVolumeRequest{
+			VolumeId:         volume.ID,
+			NodeId:           instanceID,
+			VolumeCapability: &csi.VolumeCapability{},
+		})
+		assert.Nil(t, err)
+		volumes, _ := d.CivoClient.ListVolumes()
+		assert.Equal(t, instanceID, volumes[0].InstanceID)
+	})
+
+	t.Run("An instance that does not exist is NotFound", func(t *testing.T) {
+		fc, _ := civogo.NewFakeClient()
+		d, _ := driver.NewTestDriver(fc)
+		d.ClusterID = ""
+		volume, _ := d.CivoClient.NewVolume(&civogo.VolumeConfig{Name: "standalone2"})
+		_, err := d.ControllerPublishVolume(context.Background(), &csi.ControllerPublishVolumeRequest{
+			VolumeId:         volume.ID,
+			NodeId:           "i-missing",
+			VolumeCapability: &csi.VolumeCapability{},
+		})
+		assert.NotNil(t, err)
+		assert.Equal(t, codes.NotFound, status.Code(err))
+	})
+}
+
+func TestCreateVolumeTopology(t *testing.T) {
+	t.Run("CreateVolume returns the driver's region as accessible topology", func(t *testing.T) {
+		fc, _ := civogo.NewFakeClient()
+		d, _ := driver.NewTestDriver(fc)
+		resp, err := d.CreateVolume(context.Background(), &csi.CreateVolumeRequest{
+			Name:               "topo",
+			VolumeCapabilities: []*csi.VolumeCapability{{AccessMode: &csi.VolumeCapability_AccessMode{Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER}}},
+		})
+		assert.Nil(t, err)
+		assert.Len(t, resp.Volume.AccessibleTopology, 1)
+		assert.Equal(t, d.Region, resp.Volume.AccessibleTopology[0].Segments["region"])
+	})
+}
