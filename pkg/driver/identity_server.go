@@ -33,6 +33,16 @@ func (d *Driver) GetPluginCapabilities(context.Context, *csi.GetPluginCapabiliti
 					},
 				},
 			},
+			// VOLUME_ACCESSIBILITY_CONSTRAINTS: without it the external-provisioner ignores the
+			// AccessibleTopology CreateVolume returns, PVs get no node affinity, and a pod using a Civo
+			// volume can be scheduled onto a node of another cloud (seen on the first live PVC).
+			{
+				Type: &csi.PluginCapability_Service_{
+					Service: &csi.PluginCapability_Service{
+						Type: csi.PluginCapability_Service_VOLUME_ACCESSIBILITY_CONSTRAINTS,
+					},
+				},
+			},
 			{
 				Type: &csi.PluginCapability_VolumeExpansion_{
 					VolumeExpansion: &csi.PluginCapability_VolumeExpansion{

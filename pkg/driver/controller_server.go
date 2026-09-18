@@ -17,6 +17,19 @@ import (
 // BytesInGigabyte describes how many bytes are in a gigabyte
 const BytesInGigabyte int64 = 1024 * 1024 * 1024
 
+// volumeTopology is the accessible topology of every volume this driver creates: the region the
+// controller serves, under the same key the node plugin already reports in NodeGetInfo ("region").
+// Returning it lets the external-provisioner (with Topology=true) write a node affinity on the PV, so
+// a pod using the volume is only scheduled onto a node labelled with that region. In an all-Civo
+// cluster that is a no-op; in a cluster with nodes from more than one provider it is what keeps a
+// Civo-backed pod on a Civo node, with no per-workload node selector.
+func (d *Driver) volumeTopology() []*csi.Topology {
+	if d.Region == "" {
+		return nil
+	}
+	return []*csi.Topology{{Segments: map[string]string{"region": d.Region}}}
+}
+
 // CivoVolumeAvailableRetries is the number of times we will retry to check if a volume is available
 const CivoVolumeAvailableRetries int = 20
 
@@ -178,8 +191,9 @@ func (d *Driver) createVolumeUnsynced(_ context.Context, req *csi.CreateVolumeRe
 	if available {
 		return &csi.CreateVolumeResponse{
 			Volume: &csi.Volume{
-				VolumeId:      volume.ID,
-				CapacityBytes: int64(v.SizeGigabytes) * BytesInGigabyte,
+				VolumeId:           volume.ID,
+				CapacityBytes:      int64(v.SizeGigabytes) * BytesInGigabyte,
+				AccessibleTopology: d.volumeTopology(),
 			},
 		}, nil
 	}
@@ -207,8 +221,9 @@ func (d *Driver) resolveExistingVolume(v civogo.Volume, desiredSize int64) (*csi
 	if available {
 		return &csi.CreateVolumeResponse{
 			Volume: &csi.Volume{
-				VolumeId:      v.ID,
-				CapacityBytes: int64(v.SizeGigabytes) * BytesInGigabyte,
+				VolumeId:           v.ID,
+				CapacityBytes:      int64(v.SizeGigabytes) * BytesInGigabyte,
+				AccessibleTopology: d.volumeTopology(),
 			},
 		}, nil
 	}
