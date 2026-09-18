@@ -40,6 +40,7 @@ type Driver struct {
 	Region            string
 	Namespace         string
 	ClusterID         string
+	NetworkID         string // standalone mode: the network every volume is created on (the API requires one)
 	TestMode          bool
 	grpcServer        *grpc.Server
 	ClusterVolumeType string

@@ -134,6 +134,7 @@ func (d *Driver) createVolumeUnsynced(_ context.Context, req *csi.CreateVolumeRe
 		Region:        d.Region,
 		Namespace:     d.Namespace,
 		ClusterID:     d.ClusterID,
+		NetworkID:     d.NetworkID,
 		SizeGigabytes: int(desiredSize),
 		VolumeType:    d.ClusterVolumeType,
 		// SnapshotID: snapshotID, // TODO: Uncomment after client implementation is complete.
@@ -311,19 +312,31 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 	}
 
 	log.Debug().Msg("Check if Node exits")
-	cluster, err := d.CivoClient.GetKubernetesCluster(d.ClusterID)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "unable to connect to Civo Api. error: %s", err)
-	}
-	found := false
-	for _, instance := range cluster.Instances {
-		if instance.ID == req.NodeId {
-			found = true
-			break
+	if d.ClusterID == "" {
+		// Standalone mode: the node is a plain Civo instance, not a member of a Civo Kubernetes
+		// cluster, so there is no cluster instance list to look it up in. Verify the instance exists
+		// in the account instead; the attach itself is by instance id either way.
+		if _, err := d.CivoClient.GetInstance(req.NodeId); err != nil {
+			if errors.Is(err, civogo.DatabaseInstanceNotFoundError) || errors.Is(err, civogo.ZeroMatchesError) || strings.Contains(err.Error(), "NotFound") {
+				return nil, status.Errorf(codes.NotFound, "Unable to find instance %q to attach volume to", req.NodeId)
+			}
+			return nil, status.Errorf(codes.Internal, "unable to connect to Civo Api. error: %s", err)
 		}
-	}
-	if !found {
-		return nil, status.Error(codes.NotFound, "Unable to find instance to attach volume to")
+	} else {
+		cluster, err := d.CivoClient.GetKubernetesCluster(d.ClusterID)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "unable to connect to Civo Api. error: %s", err)
+		}
+		found := false
+		for _, instance := range cluster.Instances {
+			if instance.ID == req.NodeId {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, status.Error(codes.NotFound, "Unable to find instance to attach volume to")
+		}
 	}
 
 	log.Debug().Msg("Finding volume in Civo API")

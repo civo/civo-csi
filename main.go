@@ -39,12 +39,35 @@ func main() {
 
 	log.Info().Interface("d", d).Msg("Created a new driver")
 
-	log.Debug().Msg("Determining volumeType of cluster")
-	cluster, err := d.CivoClient.GetKubernetesCluster(d.ClusterID)
-	if err != nil {
-		log.Fatal().Err(err)
+	if d.ClusterID == "" {
+		// STANDALONE MODE (civo-standalone-csi). There is no Civo Kubernetes cluster: the nodes are
+		// plain Civo compute instances joined to a self-managed or third-party-managed Kubernetes
+		// cluster. Volumes are created without a cluster id and attached by instance id; the volume
+		// type comes from CIVO_VOLUME_TYPE (default "standard", the only type the compute API offers
+		// today).
+		d.ClusterVolumeType = strings.TrimSpace(os.Getenv("CIVO_VOLUME_TYPE"))
+		if d.ClusterVolumeType == "" {
+			d.ClusterVolumeType = "standard"
+		}
+		// The volumes API requires network_id; a Civo Kubernetes cluster implies it server-side, a
+		// standalone driver must say. CIVO_NETWORK_ID, else the region's default network.
+		d.NetworkID = strings.TrimSpace(os.Getenv("CIVO_NETWORK_ID"))
+		if d.NetworkID == "" {
+			net, err := d.CivoClient.GetDefaultNetwork()
+			if err != nil {
+				log.Fatal().Err(err).Msg("Standalone mode: CIVO_NETWORK_ID unset and the region's default network could not be read")
+			}
+			d.NetworkID = net.ID
+		}
+		log.Info().Str("volume_type", d.ClusterVolumeType).Str("network_id", d.NetworkID).Msg("Standalone mode: no CIVO_CLUSTER_ID, volumes attach to plain instances")
+	} else {
+		log.Debug().Msg("Determining volumeType of cluster")
+		cluster, err := d.CivoClient.GetKubernetesCluster(d.ClusterID)
+		if err != nil {
+			log.Fatal().Err(err).Msg("Unable to read the Civo Kubernetes cluster (set CIVO_CLUSTER_ID empty for standalone mode)")
+		}
+		d.ClusterVolumeType = cluster.VolumeType
 	}
-	d.ClusterVolumeType = cluster.VolumeType
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
