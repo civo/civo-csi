@@ -244,6 +244,10 @@ spec:
             - "--default-fstype=ext4"
             - "--timeout=30s"
             - "--v=5"
+            # Required for the driver's region topology to reach the PV. Without it the provisioner
+            # discards the AccessibleTopology CreateVolume returns, the PV gets no node affinity, and
+            # in a mixed-cloud cluster a pod using a Civo volume can land on a non-Civo node.
+            - "--feature-gates=Topology=true"
           env:
             - name: ADDRESS
               value: /var/lib/kubelet/plugins/csi.civo.com/csi.sock
@@ -310,16 +314,33 @@ spec:
                 secretKeyRef:
                   name: civo-api-access
                   key: namespace
+            # Optional so standalone mode needs no key at all: absent or empty both mean "no Civo
+            # Kubernetes cluster". Set it to a cluster id to get upstream's cluster-bound behaviour.
             - name: CIVO_CLUSTER_ID
               valueFrom:
                 secretKeyRef:
                   name: civo-api-access
                   key: cluster-id
+                  optional: true
             - name: CIVO_API_URL
               valueFrom:
                 secretKeyRef:
                   name: civo-api-access
                   key: api-url
+            # Standalone mode only (CIVO_CLUSTER_ID empty). Both are optional: absent keys leave the
+            # variables unset and the driver falls back to "standard" and the region's default network.
+            - name: CIVO_VOLUME_TYPE
+              valueFrom:
+                secretKeyRef:
+                  name: civo-api-access
+                  key: volume-type
+                  optional: true
+            - name: CIVO_NETWORK_ID
+              valueFrom:
+                secretKeyRef:
+                  name: civo-api-access
+                  key: network-id
+                  optional: true
           imagePullPolicy: "Always"
           volumeMounts:
             - name: socket-dir
@@ -414,16 +435,27 @@ spec:
                 secretKeyRef:
                   key: namespace
                   name: civo-api-access
+            # Optional: see the controller manifest.
             - name: CIVO_CLUSTER_ID
               valueFrom:
                 secretKeyRef:
                   key: cluster-id
                   name: civo-api-access
+                  optional: true
             - name: CIVO_API_URL
               valueFrom:
                 secretKeyRef:
                   key: api-url
                   name: civo-api-access
+            # In standalone mode the node's identity comes from /etc/civostatsd (mounted below). If your
+            # node image does not ship it, NODE_ID (the Civo instance UUID) and REGION must be set here
+            # instead -- the KUBE_NODE_NAME fallback needs a Civo Kubernetes cluster to look the name up
+            # in, so it cannot work without CIVO_CLUSTER_ID. NODE_ID differs per node, so this cannot be
+            # a single DaemonSet value; write /etc/civostatsd on the node, or split the DaemonSet.
+            # - name: NODE_ID
+            #   value: "<civo-instance-uuid>"
+            # - name: REGION
+            #   value: "<civo-region>"
             - name: CSI_ENDPOINT
               value: unix:///csi/csi.sock
           imagePullPolicy: "Always"

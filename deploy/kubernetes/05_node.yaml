@@ -85,16 +85,27 @@ spec:
                 secretKeyRef:
                   key: namespace
                   name: civo-api-access
+            # Optional: see the controller manifest.
             - name: CIVO_CLUSTER_ID
               valueFrom:
                 secretKeyRef:
                   key: cluster-id
                   name: civo-api-access
+                  optional: true
             - name: CIVO_API_URL
               valueFrom:
                 secretKeyRef:
                   key: api-url
                   name: civo-api-access
+            # In standalone mode the node's identity comes from /etc/civostatsd (mounted below). If your
+            # node image does not ship it, NODE_ID (the Civo instance UUID) and REGION must be set here
+            # instead -- the KUBE_NODE_NAME fallback needs a Civo Kubernetes cluster to look the name up
+            # in, so it cannot work without CIVO_CLUSTER_ID. NODE_ID differs per node, so this cannot be
+            # a single DaemonSet value; write /etc/civostatsd on the node, or split the DaemonSet.
+            # - name: NODE_ID
+            #   value: "<civo-instance-uuid>"
+            # - name: REGION
+            #   value: "<civo-region>"
             - name: CSI_ENDPOINT
               value: unix:///csi/csi.sock
           imagePullPolicy: "Always"
