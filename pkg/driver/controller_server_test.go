@@ -436,3 +436,94 @@ func TestControllerExpandVolume(t *testing.T) {
 		})
 	}
 }
+
+func TestSnapshots(t *testing.T) {
+	fc, _ := civogo.NewFakeClient()
+	d, _ := driver.NewTestDriver(fc)
+	volume, err := d.CivoClient.NewVolume(&civogo.VolumeConfig{Name: "src", SizeGigabytes: 10})
+	assert.Nil(t, err)
+
+	t.Run("Create is idempotent on name", func(t *testing.T) {
+		r1, err := d.CreateSnapshot(context.Background(), &csi.CreateSnapshotRequest{Name: "snap-1", SourceVolumeId: volume.ID})
+		assert.Nil(t, err)
+		assert.True(t, r1.Snapshot.ReadyToUse)
+		assert.Equal(t, volume.ID, r1.Snapshot.SourceVolumeId)
+		r2, err := d.CreateSnapshot(context.Background(), &csi.CreateSnapshotRequest{Name: "snap-1", SourceVolumeId: volume.ID})
+		assert.Nil(t, err)
+		assert.Equal(t, r1.Snapshot.SnapshotId, r2.Snapshot.SnapshotId)
+		snaps, _ := d.CivoClient.ListVolumeSnapshots()
+		assert.Len(t, snaps, 1)
+	})
+	t.Run("A name already used by another source volume is AlreadyExists", func(t *testing.T) {
+		other, _ := d.CivoClient.NewVolume(&civogo.VolumeConfig{Name: "other-src"})
+		_, err := d.CreateSnapshot(context.Background(), &csi.CreateSnapshotRequest{Name: "snap-1", SourceVolumeId: other.ID})
+		assert.NotNil(t, err)
+		assert.Equal(t, codes.AlreadyExists, status.Code(err))
+	})
+	t.Run("Missing name or source volume is InvalidArgument", func(t *testing.T) {
+		_, err := d.CreateSnapshot(context.Background(), &csi.CreateSnapshotRequest{SourceVolumeId: volume.ID})
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+		_, err = d.CreateSnapshot(context.Background(), &csi.CreateSnapshotRequest{Name: "no-source"})
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+	t.Run("Snapshots are scoped to their source volume", func(t *testing.T) {
+		other, _ := d.CivoClient.NewVolume(&civogo.VolumeConfig{Name: "other"})
+		r, err := d.CreateSnapshot(context.Background(), &csi.CreateSnapshotRequest{Name: "snap-other", SourceVolumeId: other.ID})
+		assert.Nil(t, err)
+		assert.Equal(t, other.ID, r.Snapshot.SourceVolumeId)
+		_, err = d.DeleteSnapshot(context.Background(), &csi.DeleteSnapshotRequest{SnapshotId: r.Snapshot.SnapshotId})
+		assert.Nil(t, err)
+	})
+	t.Run("List by id, by source volume, all", func(t *testing.T) {
+		snaps, _ := d.CivoClient.ListVolumeSnapshotsByVolumeID(volume.ID)
+		id := snaps[0].SnapshotID
+		byID, err := d.ListSnapshots(context.Background(), &csi.ListSnapshotsRequest{SnapshotId: id})
+		assert.Nil(t, err)
+		assert.Len(t, byID.Entries, 1)
+		byVol, err := d.ListSnapshots(context.Background(), &csi.ListSnapshotsRequest{SourceVolumeId: volume.ID})
+		assert.Nil(t, err)
+		assert.Len(t, byVol.Entries, 1)
+		all, err := d.ListSnapshots(context.Background(), &csi.ListSnapshotsRequest{})
+		assert.Nil(t, err)
+		assert.GreaterOrEqual(t, len(all.Entries), 1)
+		missing, err := d.ListSnapshots(context.Background(), &csi.ListSnapshotsRequest{SnapshotId: "nope"})
+		assert.Nil(t, err)
+		assert.Len(t, missing.Entries, 0)
+	})
+	t.Run("Restore into a new volume carries the content source", func(t *testing.T) {
+		snaps, _ := d.CivoClient.ListVolumeSnapshotsByVolumeID(volume.ID)
+		resp, err := d.CreateVolume(context.Background(), &csi.CreateVolumeRequest{
+			Name:               "restored",
+			VolumeCapabilities: []*csi.VolumeCapability{{AccessMode: &csi.VolumeCapability_AccessMode{Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER}}},
+			CapacityRange:      &csi.CapacityRange{RequiredBytes: 10 * driver.BytesInGigabyte},
+			VolumeContentSource: &csi.VolumeContentSource{Type: &csi.VolumeContentSource_Snapshot{
+				Snapshot: &csi.VolumeContentSource_SnapshotSource{SnapshotId: snaps[0].SnapshotID}}},
+		})
+		assert.Nil(t, err)
+		assert.NotNil(t, resp.Volume.ContentSource)
+	})
+	t.Run("Restoring from an unknown snapshot is NotFound", func(t *testing.T) {
+		_, err := d.CreateVolume(context.Background(), &csi.CreateVolumeRequest{
+			Name:               "restored-missing",
+			VolumeCapabilities: []*csi.VolumeCapability{{AccessMode: &csi.VolumeCapability_AccessMode{Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER}}},
+			VolumeContentSource: &csi.VolumeContentSource{Type: &csi.VolumeContentSource_Snapshot{
+				Snapshot: &csi.VolumeContentSource_SnapshotSource{SnapshotId: "does-not-exist"}}},
+		})
+		assert.NotNil(t, err)
+		assert.Equal(t, codes.NotFound, status.Code(err))
+	})
+	t.Run("Delete is idempotent", func(t *testing.T) {
+		snaps, _ := d.CivoClient.ListVolumeSnapshotsByVolumeID(volume.ID)
+		id := snaps[0].SnapshotID
+		_, err := d.DeleteSnapshot(context.Background(), &csi.DeleteSnapshotRequest{SnapshotId: id})
+		assert.Nil(t, err)
+		_, err = d.DeleteSnapshot(context.Background(), &csi.DeleteSnapshotRequest{SnapshotId: id})
+		assert.Nil(t, err)
+		left, _ := d.CivoClient.ListVolumeSnapshotsByVolumeID(volume.ID)
+		assert.Len(t, left, 0)
+	})
+	t.Run("Delete without a snapshot id is InvalidArgument", func(t *testing.T) {
+		_, err := d.DeleteSnapshot(context.Background(), &csi.DeleteSnapshotRequest{})
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+}
