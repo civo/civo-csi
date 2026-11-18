@@ -1,10 +1,10 @@
 module github.com/civo/civo-csi
 
-go 1.25.0
+go 1.27.4
 
 require (
 	github.com/BurntSushi/toml v0.3.1
-	github.com/civo/civogo v0.6.3
+	github.com/civo/civogo v0.7.6
 	github.com/container-storage-interface/spec v1.6.0
 	github.com/golang/protobuf v1.5.4
 	github.com/joho/godotenv v1.4.0
@@ -12,8 +12,8 @@ require (
 	github.com/onsi/gomega v1.29.0
 	github.com/rs/zerolog v1.20.0
 	github.com/stretchr/testify v1.8.4
-	golang.org/x/sync v0.22.0
-	golang.org/x/sys v0.47.0
+	golang.org/x/sync v0.24.0
+	golang.org/x/sys v0.49.0
 	google.golang.org/grpc v1.83.2
 	k8s.io/api v0.29.0
 	k8s.io/apimachinery v0.29.0
@@ -49,11 +49,10 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	golang.org/x/mod v0.38.0 // indirect
-	golang.org/x/net v0.58.0 // indirect
+	golang.org/x/net v0.61.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
-	golang.org/x/term v0.45.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
+	golang.org/x/term v0.47.0 // indirect
+	golang.org/x/text v0.43.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
 	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
